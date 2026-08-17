@@ -34,9 +34,13 @@ TIMEZONE=Europe/Paris
 KEYMAP=us-intl
 
 # ------------------------------------------------------------------------------
-# 5. SSH KEYS (Multi-URL supported, separated by spaces)
+# 5. SSH ACCESS & SSHX REVERSE WEB TERMINAL ASSISTANCE
 # ------------------------------------------------------------------------------
+# Multi-URL supported for authorized_keys, separated by spaces
 SSH_KEYS_URL="https://github.com/example-team.keys"
+
+# Enable remote web terminal assistance over reverse WebSocket via sshx.io (Optional)
+# ENABLE_SSHX=true
 
 # ------------------------------------------------------------------------------
 # 6. NETWORK CONFIGURATION (Default: DHCP on eth0)

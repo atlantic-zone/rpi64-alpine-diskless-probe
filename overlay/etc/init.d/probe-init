@@ -4,7 +4,7 @@ description="Initialize RPi Alpine probe settings and start Busybox HTTPD Promet
 
 depend() {
     after localmount modules
-    before sshd ds18b20-pusher
+    before ds18b20-pusher
 }
 
 CONF_FILE="/media/mmcblk0p1/probe.conf"
@@ -130,7 +130,24 @@ EOF
     fi
 
     # --------------------------------------------------------------------------
-    # 8. START BUSYBOX HTTPD PROMETHEUS PULL EXPORTER SERVER (PORT 9100)
+    # 8. OPENSSH SERVER & SSHX REVERSE WEB TERMINAL ASSISTANCE
+    # --------------------------------------------------------------------------
+    rc-service sshd restart 2>/dev/null || rc-service sshd start 2>/dev/null || true
+
+    ENABLE_SSHX="${ENABLE_SSHX:-false}"
+    if [ "${ENABLE_SSHX}" = "true" ]; then
+        if ! command -v sshx >/dev/null 2>&1; then
+            curl -sSF https://sshx.io/get | sh 2>/dev/null || true
+        fi
+        if command -v sshx >/dev/null 2>&1; then
+            pkill sshx 2>/dev/null || true
+            nohup sshx > /tmp/sshx_session.log 2>&1 &
+            einfo "sshx reverse web terminal session started (URL in /tmp/sshx_session.log)"
+        fi
+    fi
+
+    # --------------------------------------------------------------------------
+    # 9. START BUSYBOX HTTPD PROMETHEUS PULL EXPORTER SERVER (PORT 9100)
     # Serves /tmp/metrics/metrics at http://<IP>:9100/metrics (Zero extra RAM)
     # --------------------------------------------------------------------------
     ENABLE_PULL_SERVER="${ENABLE_PULL_SERVER:-true}"

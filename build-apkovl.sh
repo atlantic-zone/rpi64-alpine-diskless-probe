@@ -22,6 +22,7 @@ mkdir -p "${OVERLAY_DIR}/etc/runlevels/default"
 mkdir -p "${OVERLAY_DIR}/etc/runlevels/boot"
 
 ln -sf /etc/init.d/probe-init "${OVERLAY_DIR}/etc/runlevels/boot/probe-init"
+ln -sf /etc/init.d/sshd "${OVERLAY_DIR}/etc/runlevels/default/sshd"
 ln -sf /etc/init.d/ds18b20-pusher "${OVERLAY_DIR}/etc/runlevels/default/ds18b20-pusher"
 
 # Package apkovl
