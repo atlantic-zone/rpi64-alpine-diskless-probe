@@ -1,6 +1,5 @@
 # RPi64 Alpine Diskless Probe Configuration
 # Place this file as 'probe.conf' on the root of your FAT32 SD card.
-# Uncomment or fill in only the variables you wish to override.
 
 # ------------------------------------------------------------------------------
 # 1. IDENTIFICATION & METRICS
@@ -17,12 +16,12 @@ GPIO_PIN=4
 ENABLE_PULL_SERVER=true
 
 # ------------------------------------------------------------------------------
-# 3. PUSH METRICS ENDPOINTS (Optional - comment out or leave blank if unused)
+# 3. PUSH METRICS ENDPOINTS (Optional)
 # ------------------------------------------------------------------------------
 # VictoriaMetrics / Prometheus HTTP POST Ingestion
 #VICTORIAMETRICS_URL=http://metrics.example.com:8428/api/v1/import/prometheus
 
-# InfluxDB v2 / v1 Line Protocol Ingestion (Optional)
+# InfluxDB v2 / v1 Line Protocol Ingestion
 #INFLUXDB_URL=http://influx.example.com:8086/api/v2/write
 #INFLUXDB_TOKEN=my-token
 #INFLUXDB_ORG=my-org
@@ -35,20 +34,20 @@ TIMEZONE=Europe/Paris
 KEYMAP=us-intl
 
 # ------------------------------------------------------------------------------
-# 5. SSH KEYS (Multi-URL supported, space-separated - Optional)
+# 5. SSH KEYS (Multi-URL supported, separated by spaces)
 # ------------------------------------------------------------------------------
-#SSH_KEYS_URL="https://github.com/example-team.keys"
+SSH_KEYS_URL="https://github.com/example-team.keys"
 
 # ------------------------------------------------------------------------------
 # 6. NETWORK CONFIGURATION (Default: DHCP on eth0)
 # ------------------------------------------------------------------------------
-# Fill in for Static IP configuration; leave commented/blank for automatic DHCP
+# Static IP settings (leave commented out for DHCP)
 #STATIC_IP=10.0.0.150
 #NET_MASK=255.255.255.0
 #NET_GATEWAY=10.0.0.1
 #DNS_SERVERS="1.1.1.1 8.8.8.8"
 
-# Optional Wi-Fi settings (leave commented/blank if using Ethernet RJ45)
+# Optional Wi-Fi settings (leave commented out if using Ethernet RJ45)
 #WIFI_SSID=MyWiFiNetwork
 #WIFI_PASSWORD=SecretPassword123
 #WIFI_COUNTRY=FR

@@ -68,6 +68,12 @@ EOF
                 done
             fi
             rc-service networking restart 2>/dev/null || true
+        elif [ -n "${DNS_SERVERS}" ]; then
+            # Override DNS for DHCP connections if DNS_SERVERS is explicitly defined
+            echo "" > /etc/resolv.conf
+            for dns in ${DNS_SERVERS}; do
+                echo "nameserver ${dns}" >> /etc/resolv.conf
+            done
         fi
 
         # 6. Wi-Fi Configuration
