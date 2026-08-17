@@ -71,6 +71,48 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cleanup Old Releases (Keep Last 5 Releases)
+        run: |
+          python3 -c "
+          import urllib.request, json, os
+
+          token = os.environ.get('GITHUB_TOKEN')
+          repo = os.environ.get('GITHUB_REPOSITORY')
+          keep_count = 5
+
+          req = urllib.request.Request(
+              f'https://api.github.com/repos/{repo}/releases',
+              headers={'Authorization': f'token {token}', 'User-Agent': 'HermesAgent'}
+          )
+          
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  releases = json.loads(resp.read().decode('utf-8'))
+              
+              if len(releases) > keep_count:
+                  old_releases = releases[keep_count:]
+                  print(f'Found {len(releases)} releases. Cleaning up {len(old_releases)} older releases (keeping newest {keep_count})...')
+                  for r in old_releases:
+                      rel_id = r['id']
+                      tag = r.get('tag_name', 'unknown')
+                      del_req = urllib.request.Request(
+                          f'https://api.github.com/repos/{repo}/releases/{rel_id}',
+                          headers={'Authorization': f'token {token}', 'User-Agent': 'HermesAgent'},
+                          method='DELETE'
+                      )
+                      try:
+                          urllib.request.urlopen(del_req)
+                          print(f'  - Deleted release {tag} (ID: {rel_id})')
+                      except Exception as e:
+                          print(f'  - Failed to delete release {tag}: {e}')
+              else:
+                  print(f'Releases count ({len(releases)}) is within the limit of {keep_count}. No cleanup needed.')
+          except Exception as e:
+              print(f'Cleanup check error: {e}')
+          "
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Send Discord Release Notification
         if: env.DISCORD_WEBHOOK != ''
         env:
