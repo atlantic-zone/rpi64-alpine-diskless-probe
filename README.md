@@ -38,7 +38,7 @@ Connect the **DS18B20 digital 1-Wire temperature sensor** to the Raspberry Pi 40
 
 ### Electronic Wiring Harness Diagram (Generated via WireViz / Kroki):
 
-![DS18B20 Single Sensor Wiring Harness Diagram with 4.7kΩ Pull-Up Resistor (Kroki WireViz)](https://kroki.strat.zone/wireviz/png/eJyFkctqg0AUhvd5irOMMIaqoSnuYoS09CbmUoKITPQshkxnxAuhj9SX6TN1xtFQQ6DLf745_38uk1wKgXkjq9qfAMQRyx6RFlhpBdB8lejrV1hHT-9gUEdKJnLZisYHb9CcHpHXPiTezNvDNGICHIvA-i004l4LZTM3cmGlqjJqOd-VWYw1q1UX2Xy2OI2yewAa_HxfZbs3swmEy-1Su4cb5yFw77INilqOZuoJbPGzBIP_nWu_WsE0xsIyATA9IOfyPMwYcJqf1FCTnB45dvt8pUxkQVub5DOrcGSeS64XD0kcEji8EAie08vP8TojecaKgGN_KAQhbahKrZRZoQPNEZkUXZLdedh_rwmJQ8Aj4KY9u3TWEVfBgVztbMTt29VD6c1jDl9-AS-jrWA=)
+![DS18B20 Single Sensor Wiring Harness Diagram with 4.7kΩ Pull-Up Resistor (Kroki WireViz)](https://kroki.strat.zone/wireviz/png/eJyFkctqg0AUhvd5irOMMIaqoSnuYoS09CbmUoKITPQshkxnxAuhj9SX6TN1xtFQQ6DLf745_38uk1wKgXkjq9qfAMQRyx6RFlhpBdB8lejrV1hHT-9gUEdKJnLZisYHb9CcHpHXPiTezNvDNGICHIvA-i004l4LZTM3cmGlqjJqOd-VWYw1q1UX2Xy2OI2yewAa_HxfZbs3swmEy-1Su4cb5yFw77INilqOZuoJbPGzBIP_nWu_WsE0xsIyATA9IOfyPMwYcJqf1FCTnB45dvt8pVxkQVub5DOrcGSeS64XD0kcEji8EAie08vP8TojecaKgGN_KAQhbahKrZRZoQPNEZkUXZLdedh_rwmJQ8Aj4KY9u3TWEVfBgVztbMTt29VD6c1jDl9-AS-jrWA=)
 
 ```text
        Raspberry Pi Header (40-Pin)
@@ -56,76 +56,38 @@ Connect the **DS18B20 digital 1-Wire temperature sensor** to the Raspberry Pi 40
 
 ---
 
-## 🛠️ SD Card Flashing & Preparation Guide (Linux / macOS / Windows)
+## 🛠️ SD Card Preparation Guide (macOS CLI / Terminal)
 
-The deployment is performed on a standard **FAT32** SD card partition.
+On **macOS Terminal**, follow this one-liner workflow to identify, format, mount in `/tmp`, and extract the distribution:
 
-### 1. Format SD Card to FAT32
-- **Windows:** Right-click the SD Card ➔ **Format** ➔ File System: **FAT32**.
-- **macOS:** Open **Disk Utility** ➔ **Erase** ➔ Format: **MS-DOS (FAT)**.
-- **Linux:** `sudo mkfs.vfat -F 32 -n "RPI-PROBE" /dev/sdX1`
+### 1. Identify your SD Card device
+```bash
+diskutil list
+```
+*(Identify your SD Card device identifier, e.g. `/dev/disk2` or `/dev/disk3`).*
 
-### 2. Extract Release Archive
-Extract `rpi64-alpine-diskless-probe-v*.tar.gz` directly to the root of the FAT32 partition.
+### 2. Format SD Card to FAT32 (MS-DOS) via CLI
+```bash
+# Replace diskX with your actual disk identifier (e.g. disk2)
+diskutil eraseDisk FAT32 RPIPROBE MBRFormat /dev/diskX
+```
 
-### 3. Creating & Editing `probe.conf`
+### 3. One-Liner Download, Mount & Extract to `/tmp/rpi-sd`
+```bash
+# Create mount directory, mount SD card partition, download latest release and extract
+mkdir -p /tmp/rpi-sd && \
+sudo mount -t msdos /dev/diskXs1 /tmp/rpi-sd && \
+curl -sSL "https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/latest/download/rpi64-alpine-diskless-probe-latest.tar.gz" | sudo tar -xzf - -C /tmp/rpi-sd && \
+cd /tmp/rpi-sd && sudo cp probe.conf.example probe.conf
+```
 
-📁 **Where is `probe.conf` located?**  
-`probe.conf` must be placed directly **at the root of the SD card** (FAT32 partition). 
-Rename `probe.conf.example` to **`probe.conf`** and fill in your parameters:
+### 4. Edit `probe.conf` & Unmount
+```bash
+# Edit probe.conf on the mounted SD card
+sudo nano /tmp/rpi-sd/probe.conf
 
-```ini
-# RPi64 Alpine Diskless Probe Configuration
-# Place this file as 'probe.conf' at the root of your FAT32 SD card.
-
-# ------------------------------------------------------------------------------
-# 1. IDENTIFICATION & METRICS
-# ------------------------------------------------------------------------------
-HOSTNAME=rpi-probe-01
-LOCATION=datacenter-rack-a1
-INTERVAL_SECONDS=10
-GPIO_PIN=4
-
-# ------------------------------------------------------------------------------
-# 2. PROMETHEUS PULL EXPORTER (Port 9100)
-# ------------------------------------------------------------------------------
-# Serves http://<IP>:9100/metrics using zero-RAM Busybox httpd.
-ENABLE_PULL_SERVER=true
-
-# ------------------------------------------------------------------------------
-# 3. PUSH METRICS ENDPOINTS (Optional)
-# ------------------------------------------------------------------------------
-# VictoriaMetrics / Prometheus HTTP POST Ingestion
-VICTORIAMETRICS_URL=http://metrics.example.com:8428/api/v1/import/prometheus
-
-# InfluxDB v2 / v1 Line Protocol Ingestion
-INFLUXDB_URL=
-INFLUXDB_TOKEN=
-INFLUXDB_ORG=
-INFLUXDB_BUCKET=
-
-# ------------------------------------------------------------------------------
-# 4. REGIONAL & KEYBOARD SETTINGS
-# ------------------------------------------------------------------------------
-TIMEZONE=Europe/Paris
-KEYMAP=us-intl
-
-# ------------------------------------------------------------------------------
-# 5. SSH KEYS (Multi-URL supported)
-# ------------------------------------------------------------------------------
-SSH_KEYS_URL="https://github.com/example-team.keys"
-
-# ------------------------------------------------------------------------------
-# 6. NETWORK CONFIGURATION
-# ------------------------------------------------------------------------------
-STATIC_IP=
-NET_MASK=255.255.255.0
-NET_GATEWAY=10.0.0.1
-DNS_SERVERS="1.1.1.1 8.8.8.8"
-
-WIFI_SSID=
-WIFI_PASSWORD=
-WIFI_COUNTRY=FR
+# Cleanly unmount SD card
+cd ~ && sudo umount /tmp/rpi-sd && diskutil eject /dev/diskX
 ```
 
 ---
