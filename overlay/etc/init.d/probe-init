@@ -13,36 +13,70 @@ start() {
     ebegin "Initializing probe configuration from ${CONF_FILE}"
 
     if [ -f "${CONF_FILE}" ]; then
-        # Source configuration
         . "${CONF_FILE}"
 
-        # 1. Set Hostname
+        # 1. Hostname
         if [ -n "${HOSTNAME}" ]; then
             echo "${HOSTNAME}" > /etc/hostname
             hostname "${HOSTNAME}"
         fi
 
-        # 2. Setup SSH Keys
+        # 2. Timezone
+        TIMEZONE="${TIMEZONE:-Europe/Paris}"
+        if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
+            cp "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
+            echo "${TIMEZONE}" > /etc/timezone
+        fi
+
+        # 3. Keyboard Layout
+        KEYMAP="${KEYMAP:-us-intl}"
+        if [ -n "${KEYMAP}" ]; then
+            echo "KEYMAP=${KEYMAP}" > /etc/conf.d/keymaps
+        fi
+
+        # 4. SSH Keys (Supports multiple space/newline separated URLs)
         mkdir -p /root/.ssh
         chmod 700 /root/.ssh
         if [ -n "${SSH_KEYS_URL}" ]; then
-            curl -sSL --max-time 15 "${SSH_KEYS_URL}" >> /root/.ssh/authorized_keys 2>/dev/null || true
+            for url in ${SSH_KEYS_URL}; do
+                curl -sSL --max-time 15 "${url}" >> /root/.ssh/authorized_keys 2>/dev/null || true
+            done
             sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys
             chmod 600 /root/.ssh/authorized_keys
         fi
 
-        # 3. Dynamic GPIO Overlay adjustment if non-default
-        if [ -n "${GPIO_PIN}" ] && [ "${GPIO_PIN}" != "4" ]; then
-            sed -i "s/gpiopin=[0-9]*/gpiopin=${GPIO_PIN}/" /media/mmcblk0p1/usercfg.txt 2>/dev/null || true
+        # 5. Static IP / Network Config
+        if [ -n "${STATIC_IP}" ]; then
+            NET_IFACE="${NET_IFACE:-eth0}"
+            NET_MASK="${NET_MASK:-255.255.255.0}"
+            NET_GATEWAY="${NET_GATEWAY:-${STATIC_IP%.*}.1}"
+
+            cat > /etc/network/interfaces <<EOF
+auto lo
+iface lo inet loopback
+
+auto ${NET_IFACE}
+iface ${NET_IFACE} inet static
+    address ${STATIC_IP}
+    netmask ${NET_MASK}
+    gateway ${NET_GATEWAY}
+EOF
+            if [ -n "${DNS_SERVERS}" ]; then
+                echo "" > /etc/resolv.conf
+                for dns in ${DNS_SERVERS}; do
+                    echo "nameserver ${dns}" >> /etc/resolv.conf
+                done
+            fi
+            rc-service networking restart 2>/dev/null || true
         fi
 
-        # 4. Wi-Fi Configuration
+        # 6. Wi-Fi Configuration
         if [ -n "${WIFI_SSID}" ]; then
             mkdir -p /etc/wpa_supplicant
             cat > /etc/wpa_supplicant/wpa_supplicant.conf <<EOF
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=wheel
 update_config=1
-country=FR
+country=${WIFI_COUNTRY:-FR}
 
 network={
     ssid="${WIFI_SSID}"
@@ -50,6 +84,11 @@ network={
 }
 EOF
             chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+        fi
+
+        # 7. Dynamic GPIO Overlay adjustment
+        if [ -n "${GPIO_PIN}" ] && [ "${GPIO_PIN}" != "4" ]; then
+            sed -i "s/gpiopin=[0-9]*/gpiopin=${GPIO_PIN}/" /media/mmcblk0p1/usercfg.txt 2>/dev/null || true
         fi
     else
         einfo "No probe.conf found on SD card root. Using defaults."

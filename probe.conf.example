@@ -1,13 +1,39 @@
-# Configuration Sonde Température RPi Alpine Diskless
-# Fichier à placer sous le nom 'probe.conf' à la racine de la carte SD FAT32
+# RPi64 Alpine Diskless Probe Configuration
+# Place this file as 'probe.conf' on the root of your FAT32 SD card.
 
+# ------------------------------------------------------------------------------
+# 1. IDENTIFICATION & METRICS
+# ------------------------------------------------------------------------------
 HOSTNAME=celsius-fost-hq75-01
 LOCATION=port-royal-b2
-GPIO_PIN=4
-SSH_KEYS_URL=https://github.com/ts-sz.keys
 VICTORIAMETRICS_URL=http://10.200.140.109:8428/api/v1/import/prometheus
 INTERVAL_SECONDS=10
+GPIO_PIN=4
 
-# Configuration Wi-Fi (Optionnel - laisser vide si connexion Ethernet RJ45)
+# ------------------------------------------------------------------------------
+# 2. REGIONAL & KEYBOARD SETTINGS
+# ------------------------------------------------------------------------------
+# Timezone (e.g. Europe/Paris, Europe/Madrid, UTC)
+TIMEZONE=Europe/Paris
+
+# Keyboard Layout (e.g. us, us-intl, fr, es)
+KEYMAP=us-intl
+
+# ------------------------------------------------------------------------------
+# 3. SSH KEYS (Multi-URL supported, separated by spaces or quotes)
+# ------------------------------------------------------------------------------
+SSH_KEYS_URL="https://github.com/ts-sz.keys https://github.com/valeriustinca.keys"
+
+# ------------------------------------------------------------------------------
+# 4. NETWORK CONFIGURATION (Default: DHCP on eth0)
+# ------------------------------------------------------------------------------
+# Set STATIC_IP to override DHCP. Leave blank for DHCP.
+STATIC_IP=
+NET_MASK=255.255.255.0
+NET_GATEWAY=10.98.10.1
+DNS_SERVERS="1.1.1.1 8.8.8.8"
+
+# Optional Wi-Fi settings (leave blank if using Ethernet)
 WIFI_SSID=
 WIFI_PASSWORD=
+WIFI_COUNTRY=FR
