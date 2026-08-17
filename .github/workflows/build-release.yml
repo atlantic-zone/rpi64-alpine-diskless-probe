@@ -39,7 +39,7 @@ jobs:
           echo "Injecting custom boot configurations..."
           cp boot/usercfg.txt staging/usercfg.txt
           cp boot/cmdline.txt staging/cmdline.txt
-          cp probe.conf.example staging/probe.conf
+          cp probe.conf.example staging/probe.conf.example
           
           echo "Pre-downloading APK packages into /cache..."
           mkdir -p staging/cache
