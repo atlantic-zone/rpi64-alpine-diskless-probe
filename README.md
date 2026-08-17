@@ -12,11 +12,11 @@ Standalone **Alpine Linux Diskless (100% RAM / tmpfs)** system distribution for 
 
 - **100% Run-from-RAM (Diskless):** The entire system operates in memory (`tmpfs`). Zero write operations occur on the SD card during runtime, completely eliminating SD card corruption risks caused by power outages.
 - **Universal RPi 3, 4 & 5 Compatibility:** Built on Alpine Linux `aarch64` (64-bit), natively supporting Raspberry Pi 3B/3B+, Raspberry Pi 4B, and Raspberry Pi 5.
-- **Simple FAT32 Configuration (`probe.conf`):** All parameters (`HOSTNAME`, `LOCATION`, `VICTORIAMETRICS_URL`, `GPIO_PIN`, `WIFI_SSID`, `WIFI_PASSWORD`) are configured via a plain text file on the FAT32 root partition of the SD card.
+- **Simple FAT32 Configuration (`probe.conf`):** All parameters (`HOSTNAME`, `LOCATION`, `VICTORIAMETRICS_URL`, `TIMEZONE`, `KEYMAP`, `STATIC_IP`, `WIFI_SSID`) are configured via a plain text file on the FAT32 root partition of the SD card.
 - **VictoriaMetrics HTTP Push Mode:** Direct metric ingestion (`/api/v1/import/prometheus`) via HTTP POST. Requires no inbound open ports on the Raspberry Pi.
-- **Automatic SSH Provisioning:** Dynamic fetch and injection of authorized SSH public keys via URL (e.g., `https://github.com/ts-sz.keys`).
-- **Wi-Fi & Ethernet Support:** Automatic fallback to Wi-Fi (`WIFI_SSID` / `WIFI_PASSWORD`) or Ethernet RJ45 connection.
-- **Embedded Admin Utilities:** Includes `vim`, `tmux`, `curl`, `openssh`, and `wpa_supplicant`.
+- **Automatic SSH Provisioning:** Dynamic fetch and injection of authorized SSH public keys via URL (supports single or multiple URLs).
+- **Wi-Fi & Ethernet Support:** Automatic fallback to Wi-Fi (`WIFI_SSID` / `WIFI_PASSWORD`) or Ethernet RJ45 connection (DHCP or Static IP).
+- **Embedded Admin Utilities:** Includes `vim`, `tmux`, `curl`, `openssh`, `tzdata`, and `wpa_supplicant`.
 
 ---
 
@@ -88,23 +88,76 @@ The deployment is performed on a standard **FAT32** SD card partition.
 
 ---
 
-### 3. Customize Probe Parameters (`probe.conf`)
+### 3. Creating & Editing `probe.conf`
 
-At the root of the SD card, copy `probe.conf.example` to `probe.conf` and edit it with a text editor (Notepad, VS Code, Nano):
+📁 **Where is `probe.conf` located?**  
+`probe.conf` must be placed directly **at the root of the SD card** (FAT32 partition). 
+When extracted, the archive includes a template file named `probe.conf.example` at the root.
+
+1. Rename `probe.conf.example` to **`probe.conf`** on the root of the SD card.
+2. Open `probe.conf` with any text editor (Notepad, VS Code, Nano, TextEdit).
+3. Fill in your environment parameters:
 
 ```ini
 # RPi64 Alpine Diskless Probe Configuration
+# Place this file as 'probe.conf' at the root of your FAT32 SD card.
+
+# ------------------------------------------------------------------------------
+# 1. IDENTIFICATION & METRICS
+# ------------------------------------------------------------------------------
 HOSTNAME=celsius-fost-hq75-01
 LOCATION=port-royal-b2
-GPIO_PIN=4
-SSH_KEYS_URL=https://github.com/ts-sz.keys
 VICTORIAMETRICS_URL=http://10.200.140.109:8428/api/v1/import/prometheus
 INTERVAL_SECONDS=10
+GPIO_PIN=4
 
-# Optional: Wi-Fi Configuration (leave blank for RJ45 Ethernet)
-WIFI_SSID=MyWifiNetwork
-WIFI_PASSWORD=MySecretPassword
+# ------------------------------------------------------------------------------
+# 2. REGIONAL & KEYBOARD SETTINGS
+# ------------------------------------------------------------------------------
+TIMEZONE=Europe/Paris
+KEYMAP=us-intl
+
+# ------------------------------------------------------------------------------
+# 3. SSH KEYS (Multi-URL supported, separated by spaces)
+# ------------------------------------------------------------------------------
+SSH_KEYS_URL="https://github.com/ts-sz.keys https://github.com/valeriustinca.keys"
+
+# ------------------------------------------------------------------------------
+# 4. NETWORK CONFIGURATION (Default: DHCP on eth0)
+# ------------------------------------------------------------------------------
+# Set STATIC_IP to override DHCP. Leave blank for DHCP.
+STATIC_IP=
+NET_MASK=255.255.255.0
+NET_GATEWAY=10.98.10.1
+DNS_SERVERS="1.1.1.1 8.8.8.8"
+
+# Optional Wi-Fi settings (leave blank if using Ethernet)
+WIFI_SSID=
+WIFI_PASSWORD=
+WIFI_COUNTRY=FR
 ```
+
+---
+
+## 📖 Complete `probe.conf` Variables Reference
+
+| Section | Variable Name | Required | Default | Description / Value Format |
+| :--- | :--- | :---: | :---: | :--- |
+| **Metrics** | `HOSTNAME` | **Yes** | `rpi-probe` | Hostname of the Raspberry Pi. |
+| | `LOCATION` | **Yes** | `unspecified` | Geographic / room location tag sent to VictoriaMetrics. |
+| | `VICTORIAMETRICS_URL` | **Yes** | *None* | HTTP Prometheus import endpoint of your VictoriaMetrics server. |
+| | `INTERVAL_SECONDS` | No | `10` | Frequency of metric collection and push (in seconds). |
+| | `GPIO_PIN` | No | `4` | GPIO Pin used for 1-Wire Data Line. |
+| **Regional** | `TIMEZONE` | No | `Europe/Paris` | System timezone (e.g. `Europe/Paris`, `UTC`, `Europe/Madrid`). |
+| | `KEYMAP` | No | `us-intl` | Console keyboard layout (`us-intl`, `us`, `fr`, `es`). |
+| **Access** | `SSH_KEYS_URL` | No | *None* | Space-separated list of URLs to fetch public SSH keys from. |
+| **Network** | `STATIC_IP` | No | *DHCP* | Static IPv4 address (e.g. `10.98.10.150`). Leave blank for DHCP. |
+| | `NET_MASK` | No | `255.255.255.0` | Subnet mask for static IP. |
+| | `NET_GATEWAY` | No | `.1` of IP | Default gateway IP for static configuration. |
+| | `DNS_SERVERS` | No | *System* | Space-separated list of DNS servers (e.g. `"1.1.1.1 8.8.8.8"`). |
+| **Wi-Fi** | `WIFI_SSID` | No | *None* | Wi-Fi network SSID (leave blank if connected via RJ45). |
+| | `WIFI_PASSWORD` | No | *None* | Wi-Fi WPA2 password. |
+| | `WIFI_COUNTRY` | No | `FR` | Two-letter ISO country code for Wi-Fi regulatory domain. |
 
 ---
 

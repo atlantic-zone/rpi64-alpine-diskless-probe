@@ -68,3 +68,13 @@ jobs:
           files: dist/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send Discord Release Notification
+        if: startsWith(github.ref, 'refs/tags/') && env.DISCORD_WEBHOOK != ''
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d "{\"content\": \"🚀 **New Release Published:** [rpi64-alpine-diskless-probe ${GITHUB_REF_NAME}](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/tag/${GITHUB_REF_NAME})\\nStandalone Alpine Linux Diskless (100% RAM) for RPi 3, 4 & 5 is now ready for deployment.\"}" \
+            "$DISCORD_WEBHOOK"
