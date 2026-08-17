@@ -1,5 +1,5 @@
-# RPi Alpine Diskless Temperature Probe Configuration
-# Place this file as probe.conf on the root of your FAT32 SD card.
+# Configuration Sonde Température RPi Alpine Diskless
+# Fichier à placer sous le nom 'probe.conf' à la racine de la carte SD FAT32
 
 HOSTNAME=celsius-fost-hq75-01
 LOCATION=port-royal-b2
@@ -7,3 +7,7 @@ GPIO_PIN=4
 SSH_KEYS_URL=https://github.com/ts-sz.keys
 VICTORIAMETRICS_URL=http://10.200.140.109:8428/api/v1/import/prometheus
 INTERVAL_SECONDS=10
+
+# Configuration Wi-Fi (Optionnel - laisser vide si connexion Ethernet RJ45)
+WIFI_SSID=
+WIFI_PASSWORD=

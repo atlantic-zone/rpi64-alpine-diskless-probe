@@ -35,6 +35,22 @@ start() {
         if [ -n "${GPIO_PIN}" ] && [ "${GPIO_PIN}" != "4" ]; then
             sed -i "s/gpiopin=[0-9]*/gpiopin=${GPIO_PIN}/" /media/mmcblk0p1/usercfg.txt 2>/dev/null || true
         fi
+
+        # 4. Wi-Fi Configuration
+        if [ -n "${WIFI_SSID}" ]; then
+            mkdir -p /etc/wpa_supplicant
+            cat > /etc/wpa_supplicant/wpa_supplicant.conf <<EOF
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=wheel
+update_config=1
+country=FR
+
+network={
+    ssid="${WIFI_SSID}"
+    psk="${WIFI_PASSWORD}"
+}
+EOF
+            chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+        fi
     else
         einfo "No probe.conf found on SD card root. Using defaults."
     fi
