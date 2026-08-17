@@ -1,56 +1,56 @@
-# AGENTS.md - Guide d'Exploitation pour Agents IA
+# AGENTS.md - AI Agent Operational & Field Troubleshooting Manual
 
-Fichier de cadrage pour tout agent IA (Hermes / XO / Subagents) intervenant sur ce dépôt ou en SSH sur une sonde Raspberry Pi Alpine Diskless.
-
----
-
-## 🎯 Identité & Rôle du Prototype
-
-Ce projet (`atlantic-zone/rpi-alpine-diskless-probe`) fournit une distribution Alpine Linux **100 % en RAM (Diskless)** pour Raspberry Pi 4 & 5 (Architecture `aarch64` / `rpi64`).
-
-L'objectif est d'assurer une mesure continue de température via une sonde 1-Wire DS18B20 et de pousser les métriques en HTTP POST vers VictoriaMetrics.
+Operational framework and reference manual for AI agents (Hermes, XO, subagents) and sysadmins operating on this repository or interacting with a deployed Raspberry Pi Alpine Diskless probe via SSH.
 
 ---
 
-## ⚠️ RÈGLES CRITIQUES D'EXPLOITATION DISKLESS (RAM)
+## 🎯 Scope & Hardware Compatibility
 
-1. **Le système de fichiers `/` est sur `tmpfs` (RAM) :**
-   Toute modification faite dans `/etc` ou dans l'arborescence racine **sera intégralement perdue au redémarrage** sauf si vous exécutez la commande de persistance :
+This repository (`atlantic-zone/rpi64-alpine-diskless-probe`) builds a **100% Run-from-RAM (Diskless)** Alpine Linux distribution for **Raspberry Pi 3, 4, and 5** (`aarch64` / `rpi64`).
+
+Its primary function is continuous ambient temperature acquisition via a 1-Wire DS18B20 sensor and real-time HTTP POST ingestion into **VictoriaMetrics**.
+
+---
+
+## ⚠️ DISKLESS (RAM) OPERATIONAL RULES
+
+1. **Root Filesystem is on `tmpfs` (RAM):**
+   Any changes made to `/etc`, `/usr`, `/root`, or `/var` are volatile and **will be lost upon reboot** unless explicitly persisted using the Alpine Local Backup tool:
    ```bash
    lbu commit
    ```
-2. **Le fichier de configuration source est `/media/mmcblk0p1/probe.conf` :**
-   Il réside sur la partition FAT32 de la carte SD. Si vous modifiez un paramètre (`HOSTNAME`, `LOCATION`, `VICTORIAMETRICS_URL`, `WIFI_SSID`), modifiez-le dans `/media/mmcblk0p1/probe.conf` et relancez le service d'initialisation :
+2. **Master Configuration Source is `/media/mmcblk0p1/probe.conf`:**
+   Resides on the FAT32 SD card partition. To modify `HOSTNAME`, `LOCATION`, `VICTORIAMETRICS_URL`, `GPIO_PIN`, or Wi-Fi credentials, edit `/media/mmcblk0p1/probe.conf` and re-apply settings:
    ```bash
    rc-service probe-init restart
    rc-service ds18b20-pusher restart
    ```
-3. **Jamais de `dockerd` ou de gros daemons sur le RPi :**
-   Le Pi dispose de ressources RAM/CPU dédiées à la mesure. Tout l'outillage tourne en natif OpenRC.
+3. **No Docker / Container Daemons:**
+   The probe operates entirely via native OpenRC init scripts to maintain minimal RAM and CPU footprint.
 
 ---
 
-## 🛠️ Diagnostiquer une Sonde via SSH
+## 🛠️ Remote Diagnostics & SSH Troubleshooting
 
-En vous connectant en SSH sur le Raspberry Pi (`root@<IP>` ou via tunnel jump) :
+When connected to a deployed probe via SSH:
 
-### 1. Vérifier la lecture brute du capteur 1-Wire DS18B20
+### 1. Verify 1-Wire DS18B20 Sensor Reading
 ```bash
 cat /sys/bus/w1/devices/28-*/w1_slave
 ```
-- **Résultat attendu :**
+- **Expected Output:**
   ```text
   72 01 4b 46 7f ff 0e 10 57 : crc=57 YES
   72 01 4b 46 7f ff 0e 10 57 t=21437
   ```
-  *(La présence de `YES` confirme le bon CRC ; `t=21437` correspond à 21.437 °C).*
+  *(Presence of `YES` validates hardware CRC; `t=21437` indicates 21.437 °C).*
 
-### 2. Statut et logs du daemon de poussée VictoriaMetrics
+### 2. Check Service Daemon Status
 ```bash
 rc-service ds18b20-pusher status
 ```
 
-### 3. Tester manuellement la poussée HTTP vers VictoriaMetrics
+### 3. Test Manual Metric Ingestion to VictoriaMetrics
 ```bash
 curl -sS -X POST "http://10.200.140.109:8428/api/v1/import/prometheus" \
   --data-binary 'temperature_celsius{hostname="test-probe",location="lab"} 20.5'
@@ -58,12 +58,12 @@ curl -sS -X POST "http://10.200.140.109:8428/api/v1/import/prometheus" \
 
 ---
 
-## 📌 Architecture des Fichiers Clés
+## 📌 File Architecture Reference
 
-| Fichier / Dossier | Rôle |
+| Path / File | Purpose |
 |---|---|
-| `/media/mmcblk0p1/probe.conf` | Configuration source modifiable sur la carte SD FAT32 |
-| `/etc/init.d/probe-init` | Service OpenRC appliquant `probe.conf` au boot (Hostname, SSH, Wi-Fi) |
-| `/etc/init.d/ds18b20-pusher` | Service OpenRC gérant la boucle de lecture et poussée HTTP |
-| `/usr/local/bin/ds18b20-pusher.sh` | Script Shell exécutant la boucle de mesure |
-| `/etc/apk/world` | Liste des paquets Alpine installés en RAM (`vim`, `tmux`, `curl`, etc.) |
+| `/media/mmcblk0p1/probe.conf` | Plaintext configuration source on FAT32 partition |
+| `/etc/init.d/probe-init` | OpenRC service applying `probe.conf` settings at boot (Hostname, SSH, Wi-Fi) |
+| `/etc/init.d/ds18b20-pusher` | OpenRC service managing the metrics collection loop |
+| `/usr/local/bin/ds18b20-pusher.sh` | Shell script executing sensor sampling and HTTP POST push |
+| `/etc/apk/world` | List of Alpine packages installed in RAM (`vim`, `tmux`, `curl`, etc.) |

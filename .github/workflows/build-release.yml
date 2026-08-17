@@ -1,4 +1,4 @@
-name: Build RPi Alpine Diskless Probe Release
+name: Build RPi64 Alpine Diskless Probe Release
 
 on:
   push:
@@ -50,7 +50,7 @@ jobs:
             sh -c "apk update && apk fetch --recursive -o /cache \$(cat /world)"
           
           echo "Packing final distribution archive..."
-          RELEASE_NAME="rpi-alpine-diskless-probe-${GITHUB_REF_NAME:-latest}.tar.gz"
+          RELEASE_NAME="rpi64-alpine-diskless-probe-${GITHUB_REF_NAME:-latest}.tar.gz"
           tar -czf "dist/${RELEASE_NAME}" -C staging .
           
           echo "Release bundle ready: dist/${RELEASE_NAME}"
@@ -58,7 +58,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rpi-alpine-diskless-probe
+          name: rpi64-alpine-diskless-probe
           path: dist/*.tar.gz
 
       - name: Create GitHub Release
