@@ -1,10 +1,10 @@
 #!/sbin/openrc-run
 
-description="Initialize RPi Alpine probe settings and start Busybox HTTPD Prometheus PULL server"
+description="Initialize RPi Alpine probe settings and generate Telegraf configuration"
 
 depend() {
     after localmount modules
-    before ds18b20-pusher
+    before telegraf
 }
 
 CONF_FILE="/media/mmcblk0p1/probe.conf"
@@ -140,20 +140,93 @@ EOF
     rc-service sshd restart 2>/dev/null || rc-service sshd start 2>/dev/null || true
 
     # --------------------------------------------------------------------------
-    # 10. START BUSYBOX HTTPD PROMETHEUS PULL EXPORTER SERVER (PORT 9100)
-    # Serves /tmp/metrics/metrics at http://<IP>:9100/metrics (Zero extra RAM)
+    # 10. GENERATE INDUSTRIAL TELEGRAF CONFIGURATION (/etc/telegraf/telegraf.conf)
     # --------------------------------------------------------------------------
+    mkdir -p /etc/telegraf
+    HOSTNAME_VAL="${HOSTNAME:-rpi-probe-01}"
+    LOCATION_VAL="${LOCATION:-datacenter}"
+    INTERVAL_VAL="${INTERVAL_SECONDS:-10}s"
+
+    cat > /etc/telegraf/telegraf.conf <<EOF
+[global_tags]
+  hostname = "${HOSTNAME_VAL}"
+  location = "${LOCATION_VAL}"
+  probe_type = "rpi64-alpine-diskless"
+
+[agent]
+  interval = "${INTERVAL_VAL}"
+  round_interval = true
+  metric_batch_size = 1000
+  metric_buffer_limit = 10000
+  collection_jitter = "0s"
+  flush_interval = "10s"
+  flush_jitter = "0s"
+  precision = ""
+  hostname = "${HOSTNAME_VAL}"
+  omit_hostname = false
+
+# ------------------------------------------------------------------------------
+# INPUT PLUGINS (HARDWARE & SYSTEM METRICS)
+# ------------------------------------------------------------------------------
+
+# DS18B20 1-Wire Thermal Sensor & Raspberry Pi SoC Temperature
+[[inputs.temp]]
+
+# Host System Metrics
+[[inputs.system]]
+
+[[inputs.cpu]]
+  percpu = false
+  totalcpu = true
+
+[[inputs.mem]]
+
+[[inputs.disk]]
+  mount_points = ["/media/mmcblk0p1", "/"]
+
+[[inputs.net]]
+  interfaces = ["eth0", "wlan0"]
+
+# ------------------------------------------------------------------------------
+# OUTPUT PLUGINS (DUAL-MODE METRICS)
+# ------------------------------------------------------------------------------
+
+EOF
+
+    # Output 1: Prometheus PULL Exporter (Port 9100)
     ENABLE_PULL_SERVER="${ENABLE_PULL_SERVER:-true}"
     if [ "${ENABLE_PULL_SERVER}" = "true" ]; then
-        mkdir -p /tmp/metrics
-        pkill httpd 2>/dev/null || true
-        if command -v httpd >/dev/null 2>&1; then
-            httpd -h /tmp/metrics -p 9100
-        elif busybox httpd -h /tmp/metrics >/dev/null 2>&1; then
-            busybox httpd -h /tmp/metrics -p 9100
-        fi
-        einfo "Busybox HTTPD Prometheus PULL Exporter started on port 9100 (/metrics)"
+        cat >> /etc/telegraf/telegraf.conf <<EOF
+[[outputs.prometheus_client]]
+  listen = ":9100"
+  path = "/metrics"
+EOF
     fi
+
+    # Output 2: VictoriaMetrics / Prometheus Remote Write PUSH
+    if [ -n "${VICTORIAMETRICS_URL}" ]; then
+        cat >> /etc/telegraf/telegraf.conf <<EOF
+
+[[outputs.http]]
+  url = "${VICTORIAMETRICS_URL}"
+  data_format = "prometheus"
+EOF
+    fi
+
+    # Output 3: InfluxDB v2 / v1 Line Protocol PUSH
+    if [ -n "${INFLUXDB_URL}" ]; then
+        cat >> /etc/telegraf/telegraf.conf <<EOF
+
+[[outputs.influxdb_v2]]
+  urls = ["${INFLUXDB_URL}"]
+  token = "${INFLUXDB_TOKEN}"
+  organization = "${INFLUXDB_ORG}"
+  bucket = "${INFLUXDB_BUCKET}"
+EOF
+    fi
+
+    # Restart Telegraf daemon with updated configuration
+    rc-service telegraf restart 2>/dev/null || rc-service telegraf start 2>/dev/null || true
 
     eend 0
 }

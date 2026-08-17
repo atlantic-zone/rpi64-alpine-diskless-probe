@@ -12,13 +12,13 @@ GPIO_PIN=4
 # ------------------------------------------------------------------------------
 # 2. PROMETHEUS PULL EXPORTER (Port 9100)
 # ------------------------------------------------------------------------------
-# Serves http://<IP>:9100/metrics using zero-RAM Busybox httpd.
+# Serves http://<IP>:9100/metrics using Telegraf prometheus_client output plugin.
 ENABLE_PULL_SERVER=true
 
 # ------------------------------------------------------------------------------
 # 3. PUSH METRICS ENDPOINTS (Optional)
 # ------------------------------------------------------------------------------
-# VictoriaMetrics / Prometheus HTTP POST Ingestion
+# VictoriaMetrics / Prometheus HTTP POST Ingestion (Prometheus Remote Write)
 #VICTORIAMETRICS_URL=http://metrics.example.com:8428/api/v1/import/prometheus
 
 # InfluxDB v2 / v1 Line Protocol Ingestion

@@ -8,7 +8,7 @@ echo "🔍 Running pre-flight APKOVL & Kernel validation checks..."
 
 # 1. Syntax check on all shell scripts
 echo "  [1/4] Checking shell script syntax..."
-for s in overlay/etc/init.d/* overlay/usr/local/bin/*.sh build-apkovl.sh; do
+for s in overlay/etc/init.d/* build-apkovl.sh; do
     if [ -f "$s" ]; then
         sh -n "$s" || { echo "❌ Syntax error in $s"; exit 1; }
         echo "    ✓ Syntax OK: $s"
@@ -29,7 +29,7 @@ done
 
 # 3. Check required packages in world file
 echo "  [3/4] Validating APK packages in overlay/etc/apk/world..."
-REQUIRED_PKGS="alpine-base openssh curl busybox-mdev-openrc busybox-extras chrony vim tmux wpa_supplicant tzdata kbd-bkeymaps"
+REQUIRED_PKGS="alpine-base openssh curl busybox-mdev-openrc busybox-extras chrony vim tmux wpa_supplicant tzdata kbd-bkeymaps telegraf"
 for pkg in $REQUIRED_PKGS; do
     if grep -q "^${pkg}$" overlay/etc/apk/world; then
         echo "    ✓ Package present: $pkg"
