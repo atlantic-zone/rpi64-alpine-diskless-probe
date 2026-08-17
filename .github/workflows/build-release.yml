@@ -15,6 +15,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Release Tag
+        id: tagger
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v1.1.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "TAG_NAME=${TAG}" >> $GITHUB_OUTPUT
+          echo "Target Release Tag: ${TAG}"
 
       - name: Set up QEMU for aarch64
         uses: docker/setup-qemu-action@v3
@@ -50,10 +63,13 @@ jobs:
             sh -c "apk update && apk fetch --recursive -o /cache \$(cat /world)"
           
           echo "Packing final distribution archive..."
-          RELEASE_NAME="rpi64-alpine-diskless-probe-${GITHUB_REF_NAME:-latest}.tar.gz"
-          tar -czf "dist/${RELEASE_NAME}" -C staging .
+          RELEASE_NAME="rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz"
+          tar -czf "dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz" -C staging .
+          cp "dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz" "dist/rpi64-alpine-diskless-probe-latest.tar.gz"
           
-          echo "Release bundle ready: dist/${RELEASE_NAME}"
+          echo "Release bundle ready: dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz"
+        env:
+          STEPS_TAG: ${{ steps.tagger.outputs.TAG_NAME }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -61,12 +77,22 @@ jobs:
           name: rpi64-alpine-diskless-probe
           path: dist/*.tar.gz
 
-      - name: Create or Update Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Latest Main Build' }}
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          tag_name: ${{ steps.tagger.outputs.TAG_NAME }}
+          name: ${{ steps.tagger.outputs.TAG_NAME }} - Automatic Release
+          body: |
+            ## 🌡️ RPi64 Alpine Diskless Probe - Release `${{ steps.tagger.outputs.TAG_NAME }}`
+            
+            Standalone **Alpine Linux Diskless (100% RAM)** distribution for Raspberry Pi 3, 4, and 5 (`aarch64` / `rpi64`).
+            
+            ### Included in this build:
+            - **Dual-Mode Metrics Engine:** Busybox HTTPD Prometheus PULL Exporter (port `9100`) + VictoriaMetrics / InfluxDB PUSH Exporter.
+            - **Auto Network Setup:** DHCP or Static IP, DNS servers override, Wi-Fi WPA2 support.
+            - **Pre-cached APKs:** All packages pre-downloaded in `/cache` for offline/diskless boot.
+            - **Fixes:** `busybox-extras` (`httpd`) integration and valid `/etc/network/interfaces` boot generation.
+          make_latest: "true"
           files: dist/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -117,8 +143,9 @@ jobs:
         if: env.DISCORD_WEBHOOK != ''
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          STEPS_TAG: ${{ steps.tagger.outputs.TAG_NAME }}
         run: |
           curl -H "Content-Type: application/json" \
             -X POST \
-            -d "{\"content\": \"🚀 **Release Updated (${GITHUB_REF_NAME}):** [rpi64-alpine-diskless-probe](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/tag/${GITHUB_REF_NAME:-latest})\\\\nStandalone Alpine Linux Diskless (100% RAM) bundle for RPi 3, 4 & 5 is built and ready.\"}" \
+            -d "{\"content\": \"🚀 **New Release Published (${STEPS_TAG}):** [rpi64-alpine-diskless-probe](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/tag/${STEPS_TAG})\\\\nStandalone Alpine Linux Diskless (100% RAM) bundle for RPi 3, 4 & 5 is built and ready.\"}" \
             "$DISCORD_WEBHOOK"
