@@ -3,7 +3,7 @@
 description="Initialize RPi Alpine probe settings and start Busybox HTTPD Prometheus PULL server"
 
 depend() {
-    after localmount
+    after localmount modules
     before sshd ds18b20-pusher
 }
 
@@ -11,6 +11,9 @@ CONF_FILE="/media/mmcblk0p1/probe.conf"
 
 start() {
     ebegin "Initializing probe configuration from ${CONF_FILE}"
+
+    # Ensure AF_PACKET kernel socket module is loaded for udhcpc
+    modprobe af_packet 2>/dev/null || true
 
     if [ -f "${CONF_FILE}" ]; then
         . "${CONF_FILE}"
@@ -86,6 +89,10 @@ network={
 EOF
             chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
 
+            # Load Wi-Fi kernel drivers if wlan0 is configured
+            modprobe cfg80211 2>/dev/null || true
+            modprobe brcmfmac 2>/dev/null || true
+
             cat >> /etc/network/interfaces <<EOF
 
 auto wlan0
@@ -111,7 +118,6 @@ EOF
         fi
     else
         einfo "No probe.conf found on SD card root. Using defaults."
-        # Generate default DHCP interfaces if missing
         if [ ! -f /etc/network/interfaces ]; then
             cat > /etc/network/interfaces <<EOF
 auto lo

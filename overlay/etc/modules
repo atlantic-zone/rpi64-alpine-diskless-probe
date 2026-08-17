@@ -1,2 +1,5 @@
+af_packet
+cfg80211
+brcmfmac
 w1-gpio
 w1-therm
