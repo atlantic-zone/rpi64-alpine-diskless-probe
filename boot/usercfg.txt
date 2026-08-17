@@ -1,0 +1,2 @@
+# Enable 1-Wire interface on GPIO pin (default GPIO 4)
+dtoverlay=w1-gpio,gpiopin=4

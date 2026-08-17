@@ -1,0 +1,67 @@
+name: Build RPi Alpine Diskless Probe Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for aarch64
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build Release Bundle
+        run: |
+          set -e
+          ALPINE_VER="3.20.2"
+          ALPINE_BRANCH="v3.20"
+          TARBALL_URL="https://dl-cdn.alpinelinux.org/alpine/${ALPINE_BRANCH}/releases/aarch64/alpine-rpi-${ALPINE_VER}-aarch64.tar.gz"
+          
+          mkdir -p dist staging
+          
+          echo "Downloading official Alpine RPi aarch64 release..."
+          curl -sSL "${TARBALL_URL}" | tar -xzf - -C staging/
+          
+          echo "Building apkovl overlay..."
+          chmod +x build-apkovl.sh
+          ./build-apkovl.sh
+          cp build/rpi-probe.apkovl.tar.gz staging/localhost.apkovl.tar.gz
+          
+          echo "Injecting custom boot configurations..."
+          cp boot/usercfg.txt staging/usercfg.txt
+          cp boot/cmdline.txt staging/cmdline.txt
+          cp probe.conf.example staging/probe.conf
+          
+          echo "Pre-downloading APK packages into /cache..."
+          mkdir -p staging/cache
+          
+          # Use alpine aarch64 docker container to fetch packages and dependencies
+          docker run --rm -v $(pwd)/staging/cache:/cache -v $(pwd)/overlay/etc/apk/world:/world:ro \
+            arm64v8/alpine:${ALPINE_VER} \
+            sh -c "apk update && apk fetch --recursive -o /cache \$(cat /world)"
+          
+          echo "Packing final distribution archive..."
+          RELEASE_NAME="rpi-alpine-diskless-probe-${GITHUB_REF_NAME:-latest}.tar.gz"
+          tar -czf "dist/${RELEASE_NAME}" -C staging .
+          
+          echo "Release bundle ready: dist/${RELEASE_NAME}"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpi-alpine-diskless-probe
+          path: dist/*.tar.gz
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

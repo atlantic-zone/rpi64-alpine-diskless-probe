@@ -1,0 +1,10 @@
+alpine-base
+openssh
+curl
+busybox-mdev-openrc
+chrony
+vim
+tmux
+wpa_supplicant
+wireless-regdb
+linux-firmware-brcm

@@ -1,0 +1,12 @@
+#!/sbin/openrc-run
+
+description="DS18B20 1-Wire Temperature Metric Pusher to VictoriaMetrics"
+
+command="/usr/local/bin/ds18b20-pusher.sh"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+depend() {
+    need net
+    after probe-init
+}

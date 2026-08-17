@@ -1,0 +1,43 @@
+#!/sbin/openrc-run
+
+description="Initialize RPi Alpine probe settings from FAT32 probe.conf"
+
+depend() {
+    after localmount
+    before sshd ds18b20-pusher
+}
+
+CONF_FILE="/media/mmcblk0p1/probe.conf"
+
+start() {
+    ebegin "Initializing probe configuration from ${CONF_FILE}"
+
+    if [ -f "${CONF_FILE}" ]; then
+        # Source configuration
+        . "${CONF_FILE}"
+
+        # 1. Set Hostname
+        if [ -n "${HOSTNAME}" ]; then
+            echo "${HOSTNAME}" > /etc/hostname
+            hostname "${HOSTNAME}"
+        fi
+
+        # 2. Setup SSH Keys
+        mkdir -p /root/.ssh
+        chmod 700 /root/.ssh
+        if [ -n "${SSH_KEYS_URL}" ]; then
+            curl -sSL --max-time 15 "${SSH_KEYS_URL}" >> /root/.ssh/authorized_keys 2>/dev/null || true
+            sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys
+            chmod 600 /root/.ssh/authorized_keys
+        fi
+
+        # 3. Dynamic GPIO Overlay adjustment if non-default
+        if [ -n "${GPIO_PIN}" ] && [ "${GPIO_PIN}" != "4" ]; then
+            sed -i "s/gpiopin=[0-9]*/gpiopin=${GPIO_PIN}/" /media/mmcblk0p1/usercfg.txt 2>/dev/null || true
+        fi
+    else
+        einfo "No probe.conf found on SD card root. Using defaults."
+    fi
+
+    eend 0
+}
