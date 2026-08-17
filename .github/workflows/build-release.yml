@@ -18,16 +18,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine Release Tag
+      - name: Determine CalVer Release Tag (vYYYY.MM.DD.RUN)
         id: tagger
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             TAG="${GITHUB_REF_NAME}"
           else
-            TAG="v1.1.${GITHUB_RUN_NUMBER}"
+            DATE_STAMP=$(date -u +'%Y.%m.%d')
+            TAG="v${DATE_STAMP}.${GITHUB_RUN_NUMBER}"
           fi
           echo "TAG_NAME=${TAG}" >> $GITHUB_OUTPUT
-          echo "Target Release Tag: ${TAG}"
+          echo "Target CalVer Release Tag: ${TAG}"
+
+      - name: Run Automated Pre-Flight APKOVL & Kernel Validation
+        run: |
+          chmod +x scripts/validate-apkovl.sh
+          ./scripts/validate-apkovl.sh
 
       - name: Set up QEMU for aarch64
         uses: docker/setup-qemu-action@v3
@@ -63,9 +69,7 @@ jobs:
             sh -c "apk update && apk fetch --recursive -o /cache \$(cat /world)"
           
           echo "Packing final distribution archive..."
-          RELEASE_NAME="rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz"
           tar -czf "dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz" -C staging .
-          cp "dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz" "dist/rpi64-alpine-diskless-probe-latest.tar.gz"
           
           echo "Release bundle ready: dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz"
         env:
@@ -77,21 +81,21 @@ jobs:
           name: rpi64-alpine-diskless-probe
           path: dist/*.tar.gz
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (CalVer)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tagger.outputs.TAG_NAME }}
-          name: ${{ steps.tagger.outputs.TAG_NAME }} - Automatic Release
+          name: ${{ steps.tagger.outputs.TAG_NAME }} - CalVer Release
           body: |
             ## 🌡️ RPi64 Alpine Diskless Probe - Release `${{ steps.tagger.outputs.TAG_NAME }}`
             
             Standalone **Alpine Linux Diskless (100% RAM)** distribution for Raspberry Pi 3, 4, and 5 (`aarch64` / `rpi64`).
             
             ### Included in this build:
+            - **CalVer Standard Tagging:** Versioned by date (`vYYYY.MM.DD.RUN`).
+            - **Automated QA Validation:** Passed syntax, OpenRC dependency, and kernel module checks.
             - **Dual-Mode Metrics Engine:** Busybox HTTPD Prometheus PULL Exporter (port `9100`) + VictoriaMetrics / InfluxDB PUSH Exporter.
-            - **Auto Network Setup:** DHCP or Static IP, DNS servers override, Wi-Fi WPA2 support.
             - **Pre-cached APKs:** All packages pre-downloaded in `/cache` for offline/diskless boot.
-            - **Fixes:** `busybox-extras` (`httpd`) integration and valid `/etc/network/interfaces` boot generation.
           make_latest: "true"
           files: dist/*.tar.gz
         env:
