@@ -1,6 +1,6 @@
 #!/sbin/openrc-run
 
-description="Initialize RPi Alpine probe settings from FAT32 probe.conf"
+description="Initialize RPi Alpine probe settings and start Busybox HTTPD Prometheus PULL server"
 
 depend() {
     after localmount
@@ -92,6 +92,18 @@ EOF
         fi
     else
         einfo "No probe.conf found on SD card root. Using defaults."
+    fi
+
+    # --------------------------------------------------------------------------
+    # 8. START BUSYBOX HTTPD PROMETHEUS PULL EXPORTER SERVER (PORT 9100)
+    # Serves /tmp/metrics/metrics at http://<IP>:9100/metrics (Zero extra RAM)
+    # --------------------------------------------------------------------------
+    ENABLE_PULL_SERVER="${ENABLE_PULL_SERVER:-true}"
+    if [ "${ENABLE_PULL_SERVER}" = "true" ]; then
+        mkdir -p /tmp/metrics
+        pkill httpd 2>/dev/null || true
+        /usr/sbin/httpd -h /tmp/metrics -p 9100
+        einfo "Busybox HTTPD Prometheus PULL Exporter started on port 9100 (/metrics)"
     fi
 
     eend 0

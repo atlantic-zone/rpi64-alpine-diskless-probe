@@ -1,10 +1,11 @@
 # 🌡️ RPi64 Alpine Diskless Temperature Probe (`rpi64-alpine-diskless-probe`)
 
 [![Build & Release](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/actions/workflows/build-release.yml/badge.svg)](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/actions/workflows/build-release.yml)
+[![Security Gates](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/actions/workflows/security-scan.yml/badge.svg)](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/actions/workflows/security-scan.yml)
 [![Platform: RPi 3, 4 & 5](https://img.shields.io/badge/Platform-Raspberry%20Pi%203%20%7C%204%20%7C%205-red.svg)](https://www.raspberrypi.com/)
 [![OS: Alpine Linux 64-bit](https://img.shields.io/badge/OS-Alpine%20Linux%2064--bit-blue.svg)](https://alpinelinux.org/)
 
-Standalone **Alpine Linux Diskless (100% RAM / tmpfs)** system distribution for Raspberry Pi 3, 4, and 5 (`aarch64` / `rpi64`) with 1-Wire DS18B20 temperature sensor probe and direct metrics push to **VictoriaMetrics**.
+Standalone **Alpine Linux Diskless (100% RAM / tmpfs)** system distribution for Raspberry Pi 3, 4, and 5 (`aarch64` / `rpi64`) with 1-Wire DS18B20 temperature sensor probe and **Dual Metric Exporter Engine (Prometheus PULL + VictoriaMetrics / InfluxDB PUSH)**.
 
 ---
 
@@ -12,11 +13,14 @@ Standalone **Alpine Linux Diskless (100% RAM / tmpfs)** system distribution for 
 
 - **100% Run-from-RAM (Diskless):** The entire system operates in memory (`tmpfs`). Zero write operations occur on the SD card during runtime, completely eliminating SD card corruption risks caused by power outages.
 - **Universal RPi 3, 4 & 5 Compatibility:** Built on Alpine Linux `aarch64` (64-bit), natively supporting Raspberry Pi 3B/3B+, Raspberry Pi 4B, and Raspberry Pi 5.
-- **Simple FAT32 Configuration (`probe.conf`):** All parameters (`HOSTNAME`, `LOCATION`, `VICTORIAMETRICS_URL`, `TIMEZONE`, `KEYMAP`, `STATIC_IP`, `WIFI_SSID`) are configured via a plain text file on the FAT32 root partition of the SD card.
-- **VictoriaMetrics HTTP Push Mode:** Direct metric ingestion (`/api/v1/import/prometheus`) via HTTP POST. Requires no inbound open ports on the Raspberry Pi.
+- **Dual Metric Engine (PULL + PUSH):**
+  - **Prometheus PULL Exporter:** Served on `http://<IP>:9100/metrics` via zero-RAM Busybox `httpd`.
+  - **VictoriaMetrics PUSH:** HTTP POST Prometheus ingestion (`/api/v1/import/prometheus`).
+  - **InfluxDB PUSH:** Native InfluxDB Line Protocol HTTP POST ingestion.
+- **Simple FAT32 Configuration (`probe.conf`):** All parameters (`HOSTNAME`, `LOCATION`, `VICTORIAMETRICS_URL`, `INFLUXDB_URL`, `TIMEZONE`, `KEYMAP`, `STATIC_IP`, `WIFI_SSID`) are configured via a plain text file on the FAT32 root partition of the SD card.
 - **Automatic SSH Provisioning:** Dynamic fetch and injection of authorized SSH public keys via URL (supports single or multiple URLs).
 - **Wi-Fi & Ethernet Support:** Automatic fallback to Wi-Fi (`WIFI_SSID` / `WIFI_PASSWORD`) or Ethernet RJ45 connection (DHCP or Static IP).
-- **Embedded Admin Utilities:** Includes `vim`, `tmux`, `curl`, `openssh`, `tzdata`, and `wpa_supplicant`.
+- **Embedded Admin Utilities:** Includes `vim`, `tmux`, `curl`, `openssh`, `tzdata`, `kbd-bkeymaps`, and `wpa_supplicant`.
 
 ---
 
@@ -50,11 +54,6 @@ Connect the **DS18B20 digital 1-Wire temperature sensor** to the Raspberry Pi 40
 
 > 💡 **Pull-Up Resistor Requirement:** A **4.7 kΩ pull-up resistor** (1/4W, color code: Yellow-Violet-Red-Gold) is required between the **RED (3.3V)** line and the **YELLOW (DATA)** line for 1-Wire signal integrity.
 
-### External Hardware Documentation & Datasheets
-* 📌 [Interactive Raspberry Pi Pinout Guide (Pinout.xyz 1-Wire)](https://pinout.xyz/pinout/1_wire)
-* 📖 [Raspberry Pi Foundation Official Hardware & GPIO Documentation](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#gpio-and-the-40-pin-header)
-* 📄 [DS18B20 Datasheet & Specification PDF (Analog Devices / Maxim)](https://datasheets.maximintegrated.com/en/ds/DS18B20.pdf)
-
 ---
 
 ## 🛠️ SD Card Flashing & Preparation Guide (Linux / macOS / Windows)
@@ -62,41 +61,18 @@ Connect the **DS18B20 digital 1-Wire temperature sensor** to the Raspberry Pi 40
 The deployment is performed on a standard **FAT32** SD card partition.
 
 ### 1. Format SD Card to FAT32
+- **Windows:** Right-click the SD Card ➔ **Format** ➔ File System: **FAT32**.
+- **macOS:** Open **Disk Utility** ➔ **Erase** ➔ Format: **MS-DOS (FAT)**.
+- **Linux:** `sudo mkfs.vfat -F 32 -n "RPI-PROBE" /dev/sdX1`
 
-- **Windows:** Right-click the SD Card in File Explorer ➔ **Format** ➔ File System: **FAT32** (or use *Raspberry Pi Imager* with the Erase/FAT32 option).
-- **macOS:** Open **Disk Utility** ➔ Select SD Card ➔ **Erase** ➔ Format: **MS-DOS (FAT)**.
-- **Linux:**
-  ```bash
-  sudo mkfs.vfat -F 32 -n "RPI-PROBE" /dev/sdX1
-  ```
-
----
-
-### 2. Copy System Archive Files
-
-1. Download the latest release `rpi64-alpine-diskless-probe-v*.tar.gz` from [GitHub Releases](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases).
-2. Extract the entire archive to the root of the FAT32 partition.
-
-#### Extraction Commands by OS:
-
-- **Linux / macOS (Terminal):**
-  ```bash
-  tar -xzf rpi64-alpine-diskless-probe-v1.0.0.tar.gz -C /Volumes/RPI-PROBE/   # macOS
-  sudo tar -xzf rpi64-alpine-diskless-probe-v1.0.0.tar.gz -C /media/user/RPI-PROBE/ # Linux
-  ```
-- **Windows:** Use 7-Zip or WinRAR to extract all files directly to the SD card drive letter (e.g. `E:\`).
-
----
+### 2. Extract Release Archive
+Extract `rpi64-alpine-diskless-probe-v*.tar.gz` directly to the root of the FAT32 partition.
 
 ### 3. Creating & Editing `probe.conf`
 
 📁 **Where is `probe.conf` located?**  
 `probe.conf` must be placed directly **at the root of the SD card** (FAT32 partition). 
-When extracted, the archive includes a template file named `probe.conf.example` at the root.
-
-1. Rename `probe.conf.example` to **`probe.conf`** on the root of the SD card.
-2. Open `probe.conf` with any text editor (Notepad, VS Code, Nano, TextEdit).
-3. Fill in your environment parameters:
+Rename `probe.conf.example` to **`probe.conf`** and fill in your parameters:
 
 ```ini
 # RPi64 Alpine Diskless Probe Configuration
@@ -107,31 +83,46 @@ When extracted, the archive includes a template file named `probe.conf.example` 
 # ------------------------------------------------------------------------------
 HOSTNAME=rpi-probe-01
 LOCATION=datacenter-rack-a1
-VICTORIAMETRICS_URL=http://metrics.example.com:8428/api/v1/import/prometheus
 INTERVAL_SECONDS=10
 GPIO_PIN=4
 
 # ------------------------------------------------------------------------------
-# 2. REGIONAL & KEYBOARD SETTINGS
+# 2. PROMETHEUS PULL EXPORTER (Port 9100)
+# ------------------------------------------------------------------------------
+# Serves http://<IP>:9100/metrics using zero-RAM Busybox httpd.
+ENABLE_PULL_SERVER=true
+
+# ------------------------------------------------------------------------------
+# 3. PUSH METRICS ENDPOINTS (Optional)
+# ------------------------------------------------------------------------------
+# VictoriaMetrics / Prometheus HTTP POST Ingestion
+VICTORIAMETRICS_URL=http://metrics.example.com:8428/api/v1/import/prometheus
+
+# InfluxDB v2 / v1 Line Protocol Ingestion
+INFLUXDB_URL=
+INFLUXDB_TOKEN=
+INFLUXDB_ORG=
+INFLUXDB_BUCKET=
+
+# ------------------------------------------------------------------------------
+# 4. REGIONAL & KEYBOARD SETTINGS
 # ------------------------------------------------------------------------------
 TIMEZONE=Europe/Paris
 KEYMAP=us-intl
 
 # ------------------------------------------------------------------------------
-# 3. SSH KEYS (Multi-URL supported, separated by spaces)
+# 5. SSH KEYS (Multi-URL supported)
 # ------------------------------------------------------------------------------
 SSH_KEYS_URL="https://github.com/example-team.keys"
 
 # ------------------------------------------------------------------------------
-# 4. NETWORK CONFIGURATION (Default: DHCP on eth0)
+# 6. NETWORK CONFIGURATION
 # ------------------------------------------------------------------------------
-# Set STATIC_IP to override DHCP. Leave blank for DHCP.
 STATIC_IP=
 NET_MASK=255.255.255.0
 NET_GATEWAY=10.0.0.1
 DNS_SERVERS="1.1.1.1 8.8.8.8"
 
-# Optional Wi-Fi settings (leave blank if using Ethernet)
 WIFI_SSID=
 WIFI_PASSWORD=
 WIFI_COUNTRY=FR
@@ -144,11 +135,16 @@ WIFI_COUNTRY=FR
 | Section | Variable Name | Required | Default | Description / Value Format |
 | :--- | :--- | :---: | :---: | :--- |
 | **Metrics** | `HOSTNAME` | **Yes** | `rpi-probe` | Hostname of the Raspberry Pi. |
-| | `LOCATION` | **Yes** | `unspecified` | Geographic / room location tag sent to VictoriaMetrics. |
-| | `VICTORIAMETRICS_URL` | **Yes** | *None* | HTTP Prometheus import endpoint of your VictoriaMetrics server. |
+| | `LOCATION` | **Yes** | `unspecified` | Geographic / room location tag sent to VictoriaMetrics/InfluxDB. |
 | | `INTERVAL_SECONDS` | No | `10` | Frequency of metric collection and push (in seconds). |
 | | `GPIO_PIN` | No | `4` | GPIO Pin used for 1-Wire Data Line. |
-| **Regional** | `TIMEZONE` | No | `Europe/Paris` | System timezone (e.g. `Europe/Paris`, `UTC`, `Europe/Madrid`). |
+| **Exporter**| `ENABLE_PULL_SERVER` | No | `true` | Enables Busybox HTTPD Prometheus PULL Exporter on port **9100**. |
+| **Push** | `VICTORIAMETRICS_URL` | No | *None* | HTTP Prometheus import endpoint (`/api/v1/import/prometheus`). |
+| | `INFLUXDB_URL` | No | *None* | InfluxDB Line Protocol HTTP write endpoint (`/api/v2/write`). |
+| | `INFLUXDB_TOKEN` | No | *None* | InfluxDB v2 API Token. |
+| | `INFLUXDB_ORG` | No | *None* | InfluxDB Organization Name. |
+| | `INFLUXDB_BUCKET` | No | *None* | InfluxDB Target Bucket Name. |
+| **Regional** | `TIMEZONE` | No | `Europe/Paris` | System timezone (e.g. `Europe/Paris`, `UTC`). |
 | | `KEYMAP` | No | `us-intl` | Console keyboard layout (`us-intl`, `us`, `fr`, `es`). |
 | **Access** | `SSH_KEYS_URL` | No | *None* | Space-separated list of URLs to fetch public SSH keys from. |
 | **Network** | `STATIC_IP` | No | *DHCP* | Static IPv4 address (e.g. `10.0.0.150`). Leave blank for DHCP. |
@@ -161,14 +157,18 @@ WIFI_COUNTRY=FR
 
 ---
 
-## 📊 Emitted Metrics (VictoriaMetrics / Prometheus)
+## 📊 Emitted Metrics Formats
 
-Metrics pushed at every configured interval:
-
+### 1. Prometheus Format (PULL via `http://<IP>:9100/metrics` or PUSH VictoriaMetrics):
 ```text
 # HELP temperature_celsius Ambient temperature in Celsius from DS18B20 sensor
 # TYPE temperature_celsius gauge
 temperature_celsius{hostname="rpi-probe-01",location="datacenter-rack-a1",sensor="ds18b20"} 21.437
+```
+
+### 2. InfluxDB Line Protocol (PUSH InfluxDB):
+```text
+temperature_celsius,hostname=rpi-probe-01,location=datacenter-rack-a1,sensor=ds18b20 value=21.437 1786992000000000000
 ```
 
 ---
@@ -177,15 +177,15 @@ temperature_celsius{hostname="rpi-probe-01",location="datacenter-rack-a1",sensor
 
 Once the Raspberry Pi boots:
 
-1. **Check status of the metric pusher service:**
+1. **Scrape local Prometheus PULL exporter:**
    ```bash
-   rc-service ds18b20-pusher status
+   curl -sS http://localhost:9100/metrics
    ```
 2. **Inspect raw sensor output locally:**
    ```bash
    cat /sys/bus/w1/devices/28-*/w1_slave
    ```
-3. **Verify the system is running 100% in RAM:**
+3. **Verify root filesystem is 100% RAM:**
    ```bash
    df -h /
    # Expected output: tmpfs on /

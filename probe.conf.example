@@ -6,28 +6,41 @@
 # ------------------------------------------------------------------------------
 HOSTNAME=rpi-probe-01
 LOCATION=datacenter-rack-a1
-VICTORIAMETRICS_URL=http://metrics.example.com:8428/api/v1/import/prometheus
 INTERVAL_SECONDS=10
 GPIO_PIN=4
 
 # ------------------------------------------------------------------------------
-# 2. REGIONAL & KEYBOARD SETTINGS
+# 2. PROMETHEUS PULL EXPORTER (Port 9100)
 # ------------------------------------------------------------------------------
-# Timezone (e.g. Europe/Paris, Europe/Madrid, UTC)
-TIMEZONE=Europe/Paris
+# Serves http://<IP>:9100/metrics using zero-RAM Busybox httpd.
+ENABLE_PULL_SERVER=true
 
-# Keyboard Layout (e.g. us, us-intl, fr, es)
+# ------------------------------------------------------------------------------
+# 3. PUSH METRICS ENDPOINTS (Optional)
+# ------------------------------------------------------------------------------
+# VictoriaMetrics / Prometheus HTTP POST Ingestion
+VICTORIAMETRICS_URL=http://metrics.example.com:8428/api/v1/import/prometheus
+
+# InfluxDB v2 / v1 Line Protocol Ingestion
+INFLUXDB_URL=
+INFLUXDB_TOKEN=
+INFLUXDB_ORG=
+INFLUXDB_BUCKET=
+
+# ------------------------------------------------------------------------------
+# 4. REGIONAL & KEYBOARD SETTINGS
+# ------------------------------------------------------------------------------
+TIMEZONE=Europe/Paris
 KEYMAP=us-intl
 
 # ------------------------------------------------------------------------------
-# 3. SSH KEYS (Multi-URL supported, separated by spaces or quotes)
+# 5. SSH KEYS (Multi-URL supported, separated by spaces)
 # ------------------------------------------------------------------------------
 SSH_KEYS_URL="https://github.com/example-team.keys"
 
 # ------------------------------------------------------------------------------
-# 4. NETWORK CONFIGURATION (Default: DHCP on eth0)
+# 6. NETWORK CONFIGURATION (Default: DHCP on eth0)
 # ------------------------------------------------------------------------------
-# Set STATIC_IP to override DHCP. Leave blank for DHCP.
 STATIC_IP=
 NET_MASK=255.255.255.0
 NET_GATEWAY=10.0.0.1
