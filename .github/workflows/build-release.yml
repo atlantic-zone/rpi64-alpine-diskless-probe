@@ -54,6 +54,12 @@ jobs:
           echo "Downloading official Alpine RPi aarch64 release..."
           curl -sSL "${TARBALL_URL}" | tar -xzf - -C staging/
           
+          echo "Pre-downloading sshx binary (AArch64) into overlay/usr/local/bin..."
+          mkdir -p overlay/usr/local/bin
+          curl -sSL "https://sshx.s3.amazonaws.com/sshx-aarch64-unknown-linux-musl.tar.gz" | tar -xzf - -C overlay/usr/local/bin/ 2>/dev/null || \
+          curl -sSL "https://github.com/ekcho/sshx/releases/latest/download/sshx-aarch64-unknown-linux-musl.tar.gz" | tar -xzf - -C overlay/usr/local/bin/ 2>/dev/null || true
+          chmod +x overlay/usr/local/bin/sshx || true
+          
           echo "Building apkovl overlay..."
           chmod +x build-apkovl.sh
           ./build-apkovl.sh
@@ -100,6 +106,7 @@ jobs:
             Standalone **Alpine Linux Diskless (100% RAM)** distribution for Raspberry Pi 3, 4, and 5 (`aarch64` / `rpi64`).
             
             ### Included in this build:
+            - **Pre-baked `sshx` Binary:** Pre-installed in `/usr/local/bin/sshx` for manual/emergency remote web terminal assistance (not launched automatically).
             - **CalVer Standard Tagging:** Versioned by date (`vYYYY.MM.DD.RUN`).
             - **Real QEMU Integration Test:** Live boot smoke-tested in CI via QEMU AArch64.
             - **Automated QA Validation:** Passed syntax, OpenRC dependency, and kernel module checks.
