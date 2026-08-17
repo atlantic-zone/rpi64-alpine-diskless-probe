@@ -9,4 +9,4 @@ wpa_supplicant
 wireless-regdb
 linux-firmware-brcm
 tzdata
-bkeymaps
+kbd-bkeymaps
