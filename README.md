@@ -4,7 +4,7 @@
 [![Platform: RPi 3, 4 & 5](https://img.shields.io/badge/Platform-Raspberry%20Pi%203%20%7C%204%20%7C%205-red.svg)](https://www.raspberrypi.com/)
 [![OS: Alpine Linux 64-bit](https://img.shields.io/badge/OS-Alpine%20Linux%2064--bit-blue.svg)](https://alpinelinux.org/)
 
-Standalone **Alpine Linux Diskless (100% RAM / tmpfs)** system distribution for Raspberry Pi 3, Raspberry Pi 4, and Raspberry Pi 5 (`aarch64` / `rpi64`) with 1-Wire DS18B20 temperature sensor probe and direct metrics push to **VictoriaMetrics**.
+Standalone **Alpine Linux Diskless (100% RAM / tmpfs)** system distribution for Raspberry Pi 3, 4, and 5 (`aarch64` / `rpi64`) with 1-Wire DS18B20 temperature sensor probe and direct metrics push to **VictoriaMetrics**.
 
 ---
 
@@ -20,13 +20,40 @@ Standalone **Alpine Linux Diskless (100% RAM / tmpfs)** system distribution for 
 
 ---
 
-## 🔌 Hardware Wiring Diagram (DS18B20 1-Wire)
+## 🔌 Hardware Wiring Specifications & WireViz Diagram
 
-Connect the DS18B20 temperature sensor to the Raspberry Pi GPIO header (default GPIO 4 Data Pin):
+Connect the **DS18B20 digital 1-Wire temperature sensor** to the Raspberry Pi 40-pin GPIO header:
 
-![DS18B20 Wiring Diagram](https://kroki.strat.zone/mermaid/svg/eJxdT8GKwjAUvPcrHjllD1W7SrsnwRpwF8QNcVGW4CHahwZDWxKL-En7M_tNGxuVuu8wZHiTeTN7q-oDzEUEflyz3becLZO3_HUgye0BSyxdZYEm8VpbfCGbVn-d1XQqiQegAovugk2-Jt7AI9BvNKY6d7ezBZPEA9DcqN2xn5vmYYtl8RxHcC2JUK7eorUX4Bpm_OMT3lEVaDumPJGE6xISoMPecAW8OqPtXuVZEGRAW4cRMHVST4o0KFKvWLD_ia4943jsD0X3ioFn0a1UoGkU4ngGZNTLjr8_wBtj4qYGgU67U2XJ_ecf-zRfMA==)
+| Wire Color | Signal Name | Description | RPi Header Connection |
+| :--- | :--- | :--- | :--- |
+| **RED** | `VCC` | Power (3.3V DC) | **Pin 1** (`3.3V Power`) |
+| **BLACK** | `GND` | Ground | **Pin 6** or **Pin 9** (`GND`) |
+| **YELLOW** | `DATA` | 1-Wire Data Line | **Pin 7** (`GPIO 4 / GPCLK0`) |
 
-> **Note:** A **4.7 kΩ pull-up resistor** is required between VCC (3.3V) and DATA (GPIO 4).
+> ⚠️ **CRITICAL LOGIC LEVEL WARNING:** Never connect the Red (VCC) wire to 5V (Pin 2 or Pin 4). DS18B20 sensors and Raspberry Pi GPIO pins operate strictly on **3.3V logic levels**. Connecting 5V to GPIO 4 will destroy the GPIO port!
+
+### Electronic Wiring Harness Diagram (Generated via WireViz / Kroki):
+
+![DS18B20 Single Sensor Wiring Harness Diagram with 4.7kΩ Pull-Up Resistor (Kroki WireViz)](https://kroki.strat.zone/wireviz/png/eJyFkctqg0AUhvd5irOMMIaqoSnuYoS09CbmUoKITPQshkxnxAuhj9SX6TN1xtFQQ6DLf745_38uk1wKgXkjq9qfAMQRyx6RFlhpBdB8lejrV1hHT-9gUEdKJnLZisYHb9CcHpHXPiTezNvDNGICHIvA-i004l4LZTM3cmGlqjJqOd-VWYw1q1UX2Xy2OI2yewAa_HxfZbs3swmEy-1Su4cb5yFw77INilqOZuoJbPGzBIP_nWu_WsE0xsIyATA9IOfyPMwYcJqf1FCTnB45dvt8pUxkQVub5DOrcGSeS64XD0kcEji8EAie08vP8TojecaKgGN_KAQhbahKrZRZoQPNEZkUXZLdedh_rwmJQ8Aj4KY9u3TWEVfBgVztbMTt29VD6c1jDl9-AS-jrWA=)
+
+```text
+       Raspberry Pi Header (40-Pin)
+       ---------------------------
+       Pin 1 (3.3V) ───────┬────────────────────────────────────── Sensor RED (VCC)
+                           │                               
+                         [4.7kΩ] Resistor (Yellow-Violet-Red-Gold)
+                           │                               
+       Pin 7 (GPIO4)───────┼────────────────────────────────────── Sensor YELLOW (DATA)
+                           │                               
+       Pin 6 (GND)  ───────┴────────────────────────────────────── Sensor BLACK (GND)
+```
+
+> 💡 **Pull-Up Resistor Requirement:** A **4.7 kΩ pull-up resistor** (1/4W, color code: Yellow-Violet-Red-Gold) is required between the **RED (3.3V)** line and the **YELLOW (DATA)** line for 1-Wire signal integrity.
+
+### External Hardware Documentation & Datasheets
+* 📌 [Interactive Raspberry Pi Pinout Guide (Pinout.xyz 1-Wire)](https://pinout.xyz/pinout/1_wire)
+* 📖 [Raspberry Pi Foundation Official Hardware & GPIO Documentation](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#gpio-and-the-40-pin-header)
+* 📄 [DS18B20 Datasheet & Specification PDF (Analog Devices / Maxim)](https://datasheets.maximintegrated.com/en/ds/DS18B20.pdf)
 
 ---
 
