@@ -45,15 +45,17 @@ start() {
             chmod 600 /root/.ssh/authorized_keys
         fi
 
-        # 5. Static IP / Network Config
-        if [ -n "${STATIC_IP}" ]; then
-            NET_IFACE="${NET_IFACE:-eth0}"
-            NET_MASK="${NET_MASK:-255.255.255.0}"
-            NET_GATEWAY="${NET_GATEWAY:-${STATIC_IP%.*}.1}"
-
-            cat > /etc/network/interfaces <<EOF
+        # 5. Network Configuration (/etc/network/interfaces)
+        NET_IFACE="${NET_IFACE:-eth0}"
+        cat > /etc/network/interfaces <<EOF
 auto lo
 iface lo inet loopback
+EOF
+
+        if [ -n "${STATIC_IP}" ]; then
+            NET_MASK="${NET_MASK:-255.255.255.0}"
+            NET_GATEWAY="${NET_GATEWAY:-${STATIC_IP%.*}.1}"
+            cat >> /etc/network/interfaces <<EOF
 
 auto ${NET_IFACE}
 iface ${NET_IFACE} inet static
@@ -61,19 +63,12 @@ iface ${NET_IFACE} inet static
     netmask ${NET_MASK}
     gateway ${NET_GATEWAY}
 EOF
-            if [ -n "${DNS_SERVERS}" ]; then
-                echo "" > /etc/resolv.conf
-                for dns in ${DNS_SERVERS}; do
-                    echo "nameserver ${dns}" >> /etc/resolv.conf
-                done
-            fi
-            rc-service networking restart 2>/dev/null || true
-        elif [ -n "${DNS_SERVERS}" ]; then
-            # Override DNS for DHCP connections if DNS_SERVERS is explicitly defined
-            echo "" > /etc/resolv.conf
-            for dns in ${DNS_SERVERS}; do
-                echo "nameserver ${dns}" >> /etc/resolv.conf
-            done
+        else
+            cat >> /etc/network/interfaces <<EOF
+
+auto ${NET_IFACE}
+iface ${NET_IFACE} inet dhcp
+EOF
         fi
 
         # 6. Wi-Fi Configuration
@@ -90,7 +85,25 @@ network={
 }
 EOF
             chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+
+            cat >> /etc/network/interfaces <<EOF
+
+auto wlan0
+iface wlan0 inet dhcp
+    wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+EOF
         fi
+
+        # DNS Server override
+        if [ -n "${DNS_SERVERS}" ]; then
+            echo "" > /etc/resolv.conf
+            for dns in ${DNS_SERVERS}; do
+                echo "nameserver ${dns}" >> /etc/resolv.conf
+            done
+        fi
+
+        # Restart networking to apply interfaces
+        rc-service networking restart 2>/dev/null || true
 
         # 7. Dynamic GPIO Overlay adjustment
         if [ -n "${GPIO_PIN}" ] && [ "${GPIO_PIN}" != "4" ]; then
@@ -98,6 +111,16 @@ EOF
         fi
     else
         einfo "No probe.conf found on SD card root. Using defaults."
+        # Generate default DHCP interfaces if missing
+        if [ ! -f /etc/network/interfaces ]; then
+            cat > /etc/network/interfaces <<EOF
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+EOF
+        fi
     fi
 
     # --------------------------------------------------------------------------
@@ -108,7 +131,11 @@ EOF
     if [ "${ENABLE_PULL_SERVER}" = "true" ]; then
         mkdir -p /tmp/metrics
         pkill httpd 2>/dev/null || true
-        /usr/sbin/httpd -h /tmp/metrics -p 9100
+        if command -v httpd >/dev/null 2>&1; then
+            httpd -h /tmp/metrics -p 9100
+        elif busybox httpd -h /tmp/metrics >/dev/null 2>&1; then
+            busybox httpd -h /tmp/metrics -p 9100
+        fi
         einfo "Busybox HTTPD Prometheus PULL Exporter started on port 9100 (/metrics)"
     fi
 

@@ -2,6 +2,7 @@ alpine-base
 openssh
 curl
 busybox-mdev-openrc
+busybox-extras
 chrony
 vim
 tmux
