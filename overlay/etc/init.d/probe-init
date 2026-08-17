@@ -37,7 +37,12 @@ start() {
             echo "KEYMAP=${KEYMAP}" > /etc/conf.d/keymaps
         fi
 
-        # 4. SSH Keys (Supports multiple space/newline separated URLs)
+        # 4. Local Root Password for Console / Emergency Login
+        if [ -n "${ROOT_PASSWORD}" ]; then
+            echo "root:${ROOT_PASSWORD}" | chpasswd 2>/dev/null || true
+        fi
+
+        # 5. SSH Keys (Supports multiple space/newline separated URLs)
         mkdir -p /root/.ssh
         chmod 700 /root/.ssh
         if [ -n "${SSH_KEYS_URL}" ]; then
@@ -48,7 +53,7 @@ start() {
             chmod 600 /root/.ssh/authorized_keys
         fi
 
-        # 5. Network Configuration (/etc/network/interfaces)
+        # 6. Network Configuration (/etc/network/interfaces)
         NET_IFACE="${NET_IFACE:-eth0}"
         cat > /etc/network/interfaces <<EOF
 auto lo
@@ -74,7 +79,7 @@ iface ${NET_IFACE} inet dhcp
 EOF
         fi
 
-        # 6. Wi-Fi Configuration
+        # 7. Wi-Fi Configuration
         if [ -n "${WIFI_SSID}" ]; then
             mkdir -p /etc/wpa_supplicant
             cat > /etc/wpa_supplicant/wpa_supplicant.conf <<EOF
@@ -112,7 +117,7 @@ EOF
         # Restart networking to apply interfaces
         rc-service networking restart 2>/dev/null || true
 
-        # 7. Dynamic GPIO Overlay adjustment
+        # 8. Dynamic GPIO Overlay adjustment
         if [ -n "${GPIO_PIN}" ] && [ "${GPIO_PIN}" != "4" ]; then
             sed -i "s/gpiopin=[0-9]*/gpiopin=${GPIO_PIN}/" /media/mmcblk0p1/usercfg.txt 2>/dev/null || true
         fi
@@ -130,24 +135,12 @@ EOF
     fi
 
     # --------------------------------------------------------------------------
-    # 8. OPENSSH SERVER & SSHX REVERSE WEB TERMINAL ASSISTANCE
+    # 9. OPENSSH SERVER
     # --------------------------------------------------------------------------
     rc-service sshd restart 2>/dev/null || rc-service sshd start 2>/dev/null || true
 
-    ENABLE_SSHX="${ENABLE_SSHX:-false}"
-    if [ "${ENABLE_SSHX}" = "true" ]; then
-        if ! command -v sshx >/dev/null 2>&1; then
-            curl -sSF https://sshx.io/get | sh 2>/dev/null || true
-        fi
-        if command -v sshx >/dev/null 2>&1; then
-            pkill sshx 2>/dev/null || true
-            nohup sshx > /tmp/sshx_session.log 2>&1 &
-            einfo "sshx reverse web terminal session started (URL in /tmp/sshx_session.log)"
-        fi
-    fi
-
     # --------------------------------------------------------------------------
-    # 9. START BUSYBOX HTTPD PROMETHEUS PULL EXPORTER SERVER (PORT 9100)
+    # 10. START BUSYBOX HTTPD PROMETHEUS PULL EXPORTER SERVER (PORT 9100)
     # Serves /tmp/metrics/metrics at http://<IP>:9100/metrics (Zero extra RAM)
     # --------------------------------------------------------------------------
     ENABLE_PULL_SERVER="${ENABLE_PULL_SERVER:-true}"
