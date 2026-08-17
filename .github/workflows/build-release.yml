@@ -32,11 +32,15 @@ jobs:
 
       - name: Run Automated Pre-Flight APKOVL & Kernel Validation
         run: |
-          chmod +x scripts/validate-apkovl.sh
+          chmod +x scripts/validate-apkovl.sh scripts/qemu-boot-test.sh
           ./scripts/validate-apkovl.sh
 
       - name: Set up QEMU for aarch64
         uses: docker/setup-qemu-action@v3
+
+      - name: Install QEMU System Emulators on Runner
+        run: |
+          sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-gui
 
       - name: Build Release Bundle
         run: |
@@ -75,6 +79,10 @@ jobs:
         env:
           STEPS_TAG: ${{ steps.tagger.outputs.TAG_NAME }}
 
+      - name: Run QEMU Headless Boot Smoke Test
+        run: |
+          ./scripts/qemu-boot-test.sh staging
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -93,6 +101,7 @@ jobs:
             
             ### Included in this build:
             - **CalVer Standard Tagging:** Versioned by date (`vYYYY.MM.DD.RUN`).
+            - **Real QEMU Integration Test:** Live boot smoke-tested in CI via QEMU AArch64.
             - **Automated QA Validation:** Passed syntax, OpenRC dependency, and kernel module checks.
             - **Dual-Mode Metrics Engine:** Busybox HTTPD Prometheus PULL Exporter (port `9100`) + VictoriaMetrics / InfluxDB PUSH Exporter.
             - **Pre-cached APKs:** All packages pre-downloaded in `/cache` for offline/diskless boot.
