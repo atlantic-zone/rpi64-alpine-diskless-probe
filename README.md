@@ -37,9 +37,9 @@ Connect the **DS18B20 digital 1-Wire temperature sensor** to the Raspberry Pi 40
 
 > ⚠️ **CRITICAL LOGIC LEVEL WARNING:** Never connect the Red (VCC) wire to 5V (Pin 2 or Pin 4). DS18B20 sensors and Raspberry Pi GPIO pins operate strictly on **3.3V logic levels**. Connecting 5V to GPIO 4 will destroy the GPIO port!
 
-### Electronic Wiring Harness Diagram (Generated via WireViz / Kroki):
+### Electronic Wiring Harness Diagram (Generated via WireViz):
 
-![DS18B20 Single Sensor Wiring Harness Diagram with 4.7kΩ Pull-Up Resistor (Kroki WireViz)](https://kroki.strat.zone/wireviz/png/eJyFkctqg0AUhvd5irOMMIaqoSnuYoS09CbmUoKITPQshkxnxAuhj9SX6TN1xtFQQ6DLf745_38uk1wKgXkjq9qfAMQRyx6RFlhpBdB8lejrV1hHT-9gUEdKJnLZisYHb9CcHpHXPiTezNvDNGICHIvA-i004l4LZTM3cmGlqjJqOd-VWYw1q1UX2Xy2OI2yewAa_HxfZbs3swmEy-1Su4cb5yFw77INilqOZuoJbPGzBIP_nWu_WsE0xsIyATA9IOfyPMwYcJqf1FCTnB45dvt8pVxkQVub5DOrcGSeS64XD0kcEji8EAie08vP8TojecaKgGN_KAQhbahKrZRZoQPNEZkUXZLdedh_rwmJQ8Aj4KY9u3TWEVfBgVztbMTt29VD6c1jDl9-AS-jrWA=)
+![DS18B20 Single Sensor Wiring Harness Diagram with 4.7kΩ Pull-Up Resistor (WireViz)](assets/wireviz-ds18b20.png)
 
 ```text
        Raspberry Pi Header (40-Pin)
