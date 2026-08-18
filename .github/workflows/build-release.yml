@@ -35,6 +35,9 @@ jobs:
           chmod +x scripts/validate-apkovl.sh
           ./scripts/validate-apkovl.sh
 
+      - name: Set up QEMU binfmt for Docker arm64 container
+        uses: docker/setup-qemu-action@v3
+
       - name: Build Release Bundle
         run: |
           set -e
