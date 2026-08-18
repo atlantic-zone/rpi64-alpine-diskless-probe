@@ -52,4 +52,21 @@ for script in overlay/etc/init.d/*; do
     fi
 done
 
+# 5. Check Telegraf root configuration and runlevels in build-apkovl.sh
+echo "  [5/5] Validating Telegraf config and runlevel definitions..."
+if [ ! -f "overlay/etc/conf.d/telegraf" ] || ! grep -q 'command_user="root:root"' overlay/etc/conf.d/telegraf; then
+    echo "❌ Missing command_user=\"root:root\" in overlay/etc/conf.d/telegraf"
+    exit 1
+fi
+echo "    ✓ Telegraf root user config OK"
+
+REQUIRED_RUNLEVELS="sysinit/modloop boot/modules boot/networking boot/chronyd boot/probe-init default/telegraf default/sshd"
+for rl in $REQUIRED_RUNLEVELS; do
+    if ! grep -q "$rl" build-apkovl.sh; then
+        echo "❌ Missing runlevel definition $rl in build-apkovl.sh"
+        exit 1
+    fi
+done
+echo "    ✓ Runlevel symlinks OK"
+
 echo "✅ All pre-flight APKOVL validation checks passed successfully!"

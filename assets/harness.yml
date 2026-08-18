@@ -1,0 +1,20 @@
+connectors:
+  RPi:
+    type: Raspberry Pi Header
+    pincount: 40
+    pinlabels: [3.3V, 5V, GPIO2, 5V, GPIO3, GND, GPIO4, TXD, GND, RXD, GPIO17, GPIO18, GPIO27, GND, GPIO22, GPIO23, 3.3V, GPIO24, MOSI, GND, MISO, GPIO25, SCK, CE0, GND, CE1, ID_SD, ID_SC, GPIO5, GND, GPIO6, GPIO12, GPIO13, GND, GPIO19, GPIO16, GPIO26, GND, GPIO20, GPIO21]
+  DS18B20:
+    type: Temperature Sensor
+    pincount: 3
+    pinlabels: [VCC, DATA, GND]
+
+cables:
+  sensor_cable:
+    wirecount: 3
+    colors: [RD, YE, BK]
+
+connections:
+  -
+    - RPi: [1, 7, 6]
+    - sensor_cable: [1-3]
+    - DS18B20: [1, 2, 3]
