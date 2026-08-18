@@ -75,8 +75,7 @@ diskutil eraseDisk FAT32 RPIPROBE MBRFormat /dev/rdiskX
 
 ### 3. One-Liner Download & Extract to `/Volumes/RPIPROBE`
 ```bash
-curl -sSL "https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/latest/download/rpi64-alpine-diskless-probe-latest.tar.gz" | tar -xzf - -C /Volumes/RPIPROBE/ && \
-cp /Volumes/RPIPROBE/probe.conf.example /Volumes/RPIPROBE/probe.conf
+curl -sSL "https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/latest/download/rpi64-alpine-diskless-probe-latest.tar.gz" | tar -xzf - -C /Volumes/RPIPROBE/
 ```
 
 ### 4. Edit `probe.conf` & Eject
