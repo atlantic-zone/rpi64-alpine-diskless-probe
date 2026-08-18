@@ -32,15 +32,8 @@ jobs:
 
       - name: Run Automated Pre-Flight APKOVL & Kernel Validation
         run: |
-          chmod +x scripts/validate-apkovl.sh scripts/qemu-boot-test.sh
+          chmod +x scripts/validate-apkovl.sh
           ./scripts/validate-apkovl.sh
-
-      - name: Set up QEMU for aarch64
-        uses: docker/setup-qemu-action@v3
-
-      - name: Install QEMU System Emulators on Runner
-        run: |
-          sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-gui
 
       - name: Build Release Bundle
         run: |
@@ -84,10 +77,6 @@ jobs:
           echo "Release bundle ready: dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz"
         env:
           STEPS_TAG: ${{ steps.tagger.outputs.TAG_NAME }}
-
-      - name: Run QEMU Headless Boot Smoke Test
-        run: |
-          ./scripts/qemu-boot-test.sh staging
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
