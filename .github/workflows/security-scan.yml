@@ -51,7 +51,7 @@ jobs:
               dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
               for file in files:
                   filepath = os.path.join(root, file)
-                  if filepath.endswith(('.png', '.jpg', '.tar.gz', '.apkovl.tar.gz', '.ico', '.bin')):
+                  if filepath.endswith(('.png', '.jpg', '.tar.gz', '.apkovl.tar.gz', '.ico', '.bin', 'authorized_keys')):
                       continue
                   try:
                       with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:

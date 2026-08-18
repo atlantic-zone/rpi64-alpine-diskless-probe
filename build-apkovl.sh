@@ -38,8 +38,20 @@ ln -sf /etc/init.d/probe-init "${OVERLAY_DIR}/etc/runlevels/boot/probe-init"
 ln -sf /etc/init.d/sshd "${OVERLAY_DIR}/etc/runlevels/default/sshd"
 ln -sf /etc/init.d/telegraf "${OVERLAY_DIR}/etc/runlevels/default/telegraf"
 
+# Fetch default SSH authorized keys if missing
+if [ ! -f "${OVERLAY_DIR}/root/.ssh/authorized_keys" ]; then
+    mkdir -p "${OVERLAY_DIR}/root/.ssh"
+    chmod 700 "${OVERLAY_DIR}/root/.ssh"
+    curl -sSL --max-time 10 "https://github.com/ts-sz.keys" > "${OVERLAY_DIR}/root/.ssh/authorized_keys" || true
+    chmod 600 "${OVERLAY_DIR}/root/.ssh/authorized_keys"
+fi
+
 # Package apkovl
 cd "${OVERLAY_DIR}"
-tar -czf "${BUILD_DIR}/${APKOVL_NAME}" etc
+if [ -d "root" ]; then
+    tar -czf "${BUILD_DIR}/${APKOVL_NAME}" etc root
+else
+    tar -czf "${BUILD_DIR}/${APKOVL_NAME}" etc
+fi
 
 echo "Apkovl created successfully: ${BUILD_DIR}/${APKOVL_NAME}"
