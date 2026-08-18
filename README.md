@@ -39,7 +39,7 @@ Connect the **DS18B20 digital 1-Wire temperature sensor** to the Raspberry Pi 40
 
 ### Electronic Wiring Harness Diagram (Generated via WireViz):
 
-![DS18B20 Single Sensor Wiring Harness Diagram with 4.7kΩ Pull-Up Resistor (WireViz)](assets/wireviz-ds18b20.svg)
+![DS18B20 Single Sensor Wiring Harness Diagram with 4.7kΩ Pull-Up Resistor (WireViz)](assets/wireviz-ds18b20.png)
 
 ```text
        Raspberry Pi Header (40-Pin)
