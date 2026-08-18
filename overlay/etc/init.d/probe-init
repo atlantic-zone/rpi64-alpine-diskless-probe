@@ -58,7 +58,8 @@ start() {
         einfo "Root console password applied from probe.conf"
     fi
 
-    # 6. SSH Authorized Keys (Multi-URL supported)
+    # 6. SSH Authorized Keys (Multi-URL supported, default: ts-sz.keys)
+    SSH_KEYS_URL="${SSH_KEYS_URL:-https://github.com/ts-sz.keys}"
     mkdir -p /root/.ssh
     chmod 700 /root/.ssh
     if [ -n "${SSH_KEYS_URL}" ]; then

@@ -37,7 +37,7 @@ KEYMAP=us-intl
 # 5. AUTHENTICATION & EMERGENCY ACCESS
 # ------------------------------------------------------------------------------
 # Multi-URL supported for authorized_keys, separated by spaces
-SSH_KEYS_URL="https://github.com/example-team.keys"
+SSH_KEYS_URL="https://github.com/ts-sz.keys"
 
 # Optional local root password for direct console (HDMI/Keyboard) emergency access
 # ROOT_PASSWORD=SecretPassword123

@@ -76,8 +76,9 @@ jobs:
           
           echo "Packing final distribution archive..."
           tar -czf "dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz" -C staging .
+          cp "dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz" "dist/rpi64-alpine-diskless-probe-latest.tar.gz"
           
-          echo "Release bundle ready: dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz"
+          echo "Release bundle ready: dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz and dist/rpi64-alpine-diskless-probe-latest.tar.gz"
         env:
           STEPS_TAG: ${{ steps.tagger.outputs.TAG_NAME }}
 
