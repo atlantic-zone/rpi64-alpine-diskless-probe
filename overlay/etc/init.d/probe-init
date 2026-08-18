@@ -1,69 +1,83 @@
 #!/sbin/openrc-run
 
-description="Initialize RPi Alpine probe settings and generate Telegraf configuration"
+description="Initialize RPi Alpine probe settings, display IP on TTY console /etc/issue, and generate Telegraf configuration"
 
 depend() {
-    after localmount modules
+    after localmount modules networking
     before telegraf
 }
 
 CONF_FILE="/media/mmcblk0p1/probe.conf"
 
 start() {
-    ebegin "Initializing probe configuration from ${CONF_FILE}"
+    ebegin "Initializing RPi Probe Settings"
 
-    # Ensure AF_PACKET kernel socket module is loaded for udhcpc
-    modprobe af_packet 2>/dev/null || true
+    # Default fallback values if probe.conf is missing or incomplete
+    HOSTNAME="rpi-probe"
+    LOCATION="unspecified"
+    INTERVAL_SECONDS="10"
+    GPIO_PIN="4"
+    TIMEZONE="Europe/Paris"
+    KEYMAP="us-intl"
+    WIFI_COUNTRY="FR"
+    VICTORIAMETRICS_URL=""
+    INFLUXDB_URL=""
+    INFLUXDB_TOKEN=""
+    INFLUXDB_ORG=""
+    INFLUXDB_BUCKET=""
 
+    # 1. Read SD Card probe.conf if present
     if [ -f "${CONF_FILE}" ]; then
+        einfo "Loading configuration from ${CONF_FILE}"
         . "${CONF_FILE}"
+    else
+        ewarn "No probe.conf found at ${CONF_FILE}. Applying minimal default configuration (DHCP)."
+    fi
 
-        # 1. Hostname
-        if [ -n "${HOSTNAME}" ]; then
-            echo "${HOSTNAME}" > /etc/hostname
-            hostname "${HOSTNAME}"
+    # 2. Set Hostname
+    echo "${HOSTNAME}" > /etc/hostname
+    hostname "${HOSTNAME}" 2>/dev/null || true
+
+    # 3. Timezone
+    if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
+        cp "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
+        echo "${TIMEZONE}" > /etc/timezone
+    fi
+
+    # 4. Keyboard Layout
+    if [ -n "${KEYMAP}" ]; then
+        echo "KEYMAP=${KEYMAP}" > /etc/conf.d/keymaps
+        if command -v loadkmap >/dev/null 2>&1 && [ -f "/usr/share/bkeymaps/${KEYMAP}.bkm" ]; then
+            loadkmap < "/usr/share/bkeymaps/${KEYMAP}.bkm" 2>/dev/null || true
         fi
+    fi
 
-        # 2. Timezone
-        TIMEZONE="${TIMEZONE:-Europe/Paris}"
-        if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
-            cp "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
-            echo "${TIMEZONE}" > /etc/timezone
-        fi
+    # 5. Root Password for Local HDMI Console Emergency Access
+    if [ -n "${ROOT_PASSWORD}" ]; then
+        echo "root:${ROOT_PASSWORD}" | chpasswd 2>/dev/null || true
+        einfo "Root console password applied from probe.conf"
+    fi
 
-        # 3. Keyboard Layout
-        KEYMAP="${KEYMAP:-us-intl}"
-        if [ -n "${KEYMAP}" ]; then
-            echo "KEYMAP=${KEYMAP}" > /etc/conf.d/keymaps
-        fi
+    # 6. SSH Authorized Keys (Multi-URL supported)
+    mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+    if [ -n "${SSH_KEYS_URL}" ]; then
+        for url in ${SSH_KEYS_URL}; do
+            curl -sSL --max-time 15 "${url}" >> /root/.ssh/authorized_keys 2>/dev/null || true
+        done
+        sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys 2>/dev/null || true
+        chmod 600 /root/.ssh/authorized_keys
+    fi
 
-        # 4. Local Root Password for Console / Emergency Login
-        if [ -n "${ROOT_PASSWORD}" ]; then
-            echo "root:${ROOT_PASSWORD}" | chpasswd 2>/dev/null || true
-        fi
-
-        # 5. SSH Keys (Supports multiple space/newline separated URLs)
-        mkdir -p /root/.ssh
-        chmod 700 /root/.ssh
-        if [ -n "${SSH_KEYS_URL}" ]; then
-            for url in ${SSH_KEYS_URL}; do
-                curl -sSL --max-time 15 "${url}" >> /root/.ssh/authorized_keys 2>/dev/null || true
-            done
-            sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys
-            chmod 600 /root/.ssh/authorized_keys
-        fi
-
-        # 6. Network Configuration (/etc/network/interfaces)
+    # 7. Network Setup (Default: DHCP on eth0/wlan0)
+    if [ -n "${STATIC_IP}" ]; then
         NET_IFACE="${NET_IFACE:-eth0}"
+        NET_MASK="${NET_MASK:-255.255.255.0}"
+        NET_GATEWAY="${NET_GATEWAY:-${STATIC_IP%.*}.1}"
+
         cat > /etc/network/interfaces <<EOF
 auto lo
 iface lo inet loopback
-EOF
-
-        if [ -n "${STATIC_IP}" ]; then
-            NET_MASK="${NET_MASK:-255.255.255.0}"
-            NET_GATEWAY="${NET_GATEWAY:-${STATIC_IP%.*}.1}"
-            cat >> /etc/network/interfaces <<EOF
 
 auto ${NET_IFACE}
 iface ${NET_IFACE} inet static
@@ -71,108 +85,65 @@ iface ${NET_IFACE} inet static
     netmask ${NET_MASK}
     gateway ${NET_GATEWAY}
 EOF
-        else
-            cat >> /etc/network/interfaces <<EOF
-
-auto ${NET_IFACE}
-iface ${NET_IFACE} inet dhcp
-EOF
-        fi
-
-        # 7. Wi-Fi Configuration
-        if [ -n "${WIFI_SSID}" ]; then
-            mkdir -p /etc/wpa_supplicant
-            cat > /etc/wpa_supplicant/wpa_supplicant.conf <<EOF
-ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=wheel
-update_config=1
-country=${WIFI_COUNTRY:-FR}
-
-network={
-    ssid="${WIFI_SSID}"
-    psk="${WIFI_PASSWORD}"
-}
-EOF
-            chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
-
-            # Load Wi-Fi kernel drivers if wlan0 is configured
-            modprobe cfg80211 2>/dev/null || true
-            modprobe brcmfmac 2>/dev/null || true
-
-            cat >> /etc/network/interfaces <<EOF
-
-auto wlan0
-iface wlan0 inet dhcp
-    wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
-EOF
-        fi
-
-        # DNS Server override
         if [ -n "${DNS_SERVERS}" ]; then
             echo "" > /etc/resolv.conf
             for dns in ${DNS_SERVERS}; do
                 echo "nameserver ${dns}" >> /etc/resolv.conf
             done
         fi
-
-        # Restart networking to apply interfaces
         rc-service networking restart 2>/dev/null || true
-
-        # 8. Dynamic GPIO Overlay adjustment
-        if [ -n "${GPIO_PIN}" ] && [ "${GPIO_PIN}" != "4" ]; then
-            sed -i "s/gpiopin=[0-9]*/gpiopin=${GPIO_PIN}/" /media/mmcblk0p1/usercfg.txt 2>/dev/null || true
-        fi
     else
-        einfo "No probe.conf found on SD card root. Using defaults."
-        if [ ! -f /etc/network/interfaces ]; then
-            cat > /etc/network/interfaces <<EOF
+        # Fallback Default DHCP on eth0 and wlan0
+        cat > /etc/network/interfaces <<EOF
 auto lo
 iface lo inet loopback
 
 auto eth0
 iface eth0 inet dhcp
+
+auto wlan0
+iface wlan0 inet dhcp
 EOF
-        fi
     fi
 
-    # --------------------------------------------------------------------------
-    # 9. OPENSSH SERVER
-    # --------------------------------------------------------------------------
-    rc-service sshd restart 2>/dev/null || rc-service sshd start 2>/dev/null || true
+    # 8. Wi-Fi Config
+    if [ -n "${WIFI_SSID}" ]; then
+        mkdir -p /etc/wpa_supplicant
+        cat > /etc/wpa_supplicant/wpa_supplicant.conf <<EOF
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=wheel
+update_config=1
+country=${WIFI_COUNTRY}
 
-    # --------------------------------------------------------------------------
-    # 10. GENERATE INDUSTRIAL TELEGRAF CONFIGURATION (/etc/telegraf/telegraf.conf)
-    # --------------------------------------------------------------------------
+network={
+    ssid="${WIFI_SSID}"
+    psk="${WIFI_PASSWORD}"
+}
+EOF
+        chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+    fi
+
+    # 9. Dynamic GPIO Overlay Adjustment
+    if [ -n "${GPIO_PIN}" ] && [ "${GPIO_PIN}" != "4" ]; then
+        sed -i "s/gpiopin=[0-9]*/gpiopin=${GPIO_PIN}/" /media/mmcblk0p1/usercfg.txt 2>/dev/null || true
+    fi
+
+    # 10. Generate Industrial Telegraf Config (/etc/telegraf/telegraf.conf)
     mkdir -p /etc/telegraf
-    HOSTNAME_VAL="${HOSTNAME:-rpi-probe-01}"
-    LOCATION_VAL="${LOCATION:-datacenter}"
-    INTERVAL_VAL="${INTERVAL_SECONDS:-10}s"
-
     cat > /etc/telegraf/telegraf.conf <<EOF
 [global_tags]
-  hostname = "${HOSTNAME_VAL}"
-  location = "${LOCATION_VAL}"
-  probe_type = "rpi64-alpine-diskless"
+  hostname = "${HOSTNAME}"
+  location = "${LOCATION}"
 
 [agent]
-  interval = "${INTERVAL_VAL}"
+  interval = "${INTERVAL_SECONDS}s"
   round_interval = true
   metric_batch_size = 1000
   metric_buffer_limit = 10000
   collection_jitter = "0s"
   flush_interval = "10s"
-  flush_jitter = "0s"
-  precision = ""
-  hostname = "${HOSTNAME_VAL}"
-  omit_hostname = false
 
-# ------------------------------------------------------------------------------
-# INPUT PLUGINS (HARDWARE & SYSTEM METRICS)
-# ------------------------------------------------------------------------------
-
-# DS18B20 1-Wire Thermal Sensor & Raspberry Pi SoC Temperature
 [[inputs.temp]]
 
-# Host System Metrics
 [[inputs.system]]
 
 [[inputs.cpu]]
@@ -187,23 +158,11 @@ EOF
 [[inputs.net]]
   interfaces = ["eth0", "wlan0"]
 
-# ------------------------------------------------------------------------------
-# OUTPUT PLUGINS (DUAL-MODE METRICS)
-# ------------------------------------------------------------------------------
-
-EOF
-
-    # Output 1: Prometheus PULL Exporter (Port 9100)
-    ENABLE_PULL_SERVER="${ENABLE_PULL_SERVER:-true}"
-    if [ "${ENABLE_PULL_SERVER}" = "true" ]; then
-        cat >> /etc/telegraf/telegraf.conf <<EOF
 [[outputs.prometheus_client]]
   listen = ":9100"
   path = "/metrics"
 EOF
-    fi
 
-    # Output 2: VictoriaMetrics / Prometheus Remote Write PUSH
     if [ -n "${VICTORIAMETRICS_URL}" ]; then
         cat >> /etc/telegraf/telegraf.conf <<EOF
 
@@ -213,7 +172,6 @@ EOF
 EOF
     fi
 
-    # Output 3: InfluxDB v2 / v1 Line Protocol PUSH
     if [ -n "${INFLUXDB_URL}" ]; then
         cat >> /etc/telegraf/telegraf.conf <<EOF
 
@@ -225,8 +183,28 @@ EOF
 EOF
     fi
 
-    # Restart Telegraf daemon with updated configuration
-    rc-service telegraf restart 2>/dev/null || rc-service telegraf start 2>/dev/null || true
+    # 11. Generate /etc/issue Banner for Local TTY HDMI Console (pre-login)
+    sleep 2
+    PRIMARY_IP=$(ip -4 addr show eth0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1 || true)
+    if [ -z "${PRIMARY_IP}" ]; then
+        PRIMARY_IP=$(ip -4 addr show wlan0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1 || true)
+    fi
+    if [ -z "${PRIMARY_IP}" ]; then
+        PRIMARY_IP="Waiting for DHCP IP / No Connection"
+    fi
+
+    cat > /etc/issue <<EOF
+
+================================================================================
+  ▲ ATLANTIC ZONE / STRATEGIC ZONE - RPI64 DISKLESS PROBE
+================================================================================
+  Hostname     : ${HOSTNAME}
+  IP Address   : ${PRIMARY_IP}
+  Metrics PULL : http://${PRIMARY_IP}:9100/metrics
+  SSH Access   : ssh root@${PRIMARY_IP}
+================================================================================
+
+EOF
 
     eend 0
 }
