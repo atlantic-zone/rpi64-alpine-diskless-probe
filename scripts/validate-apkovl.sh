@@ -60,6 +60,12 @@ if [ ! -f "overlay/etc/conf.d/telegraf" ] || ! grep -q 'command_user="root:root"
 fi
 echo "    ✓ Telegraf root user config OK"
 
+if [ ! -f "overlay/etc/network/interfaces" ]; then
+    echo "❌ Missing overlay/etc/network/interfaces"
+    exit 1
+fi
+echo "    ✓ Default network interfaces OK"
+
 REQUIRED_RUNLEVELS="sysinit/modloop boot/modules boot/networking boot/chronyd boot/probe-init default/telegraf default/sshd"
 for rl in $REQUIRED_RUNLEVELS; do
     if ! grep -q "$rl" build-apkovl.sh; then

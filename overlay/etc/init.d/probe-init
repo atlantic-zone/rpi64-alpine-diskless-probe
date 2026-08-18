@@ -107,6 +107,10 @@ iface wlan0 inet dhcp
 EOF
     fi
 
+    # Ensure networking service is active
+    rc-service networking restart 2>/dev/null || ifup -a 2>/dev/null || true
+    rc-service chronyd restart 2>/dev/null || true
+
     # 8. Wi-Fi Config
     if [ -n "${WIFI_SSID}" ]; then
         mkdir -p /etc/wpa_supplicant
