@@ -196,7 +196,7 @@ EOF
     cat > /etc/issue <<EOF
 
 ================================================================================
-  ▲ ATLANTIC ZONE / STRATEGIC ZONE - RPI64 DISKLESS PROBE
+  ▲ ATLANTIC ZONE - RPI64 DISKLESS PROBE
 ================================================================================
   Hostname     : ${HOSTNAME}
   IP Address   : ${PRIMARY_IP}
