@@ -112,4 +112,37 @@ grep -q "^Port 34522$" overlay/etc/ssh/sshd_config || { echo "❌ SSH port != 34
 grep -q "^PasswordAuthentication no$" overlay/etc/ssh/sshd_config || { echo "❌ PasswordAuthentication non desactive"; exit 1; }
 echo "    ✓ SSH hardening OK"
 
+# 7. Ownership recorded in the built apkovl
+# sshd StrictModes accepts a key only when /root, /root/.ssh and
+# authorized_keys are owned by root, and OpenRC runs an init script only when
+# root owns it. A build run under any other account records that account's uid
+# and produces an image that boots with neither SSH access nor the exporter.
+echo "  [7/7] Validating apkovl ownership..."
+grep -q -- '--owner=root:0' build-apkovl.sh || {
+    echo "❌ build-apkovl.sh packages the archive without --owner=root:0"
+    exit 1
+}
+grep -q -- '--group=root:0' build-apkovl.sh || {
+    echo "❌ build-apkovl.sh packages the archive without --group=root:0"
+    exit 1
+}
+echo "    ✓ Build forces root ownership"
+
+grep -q 'chown -R root:root /root' overlay/etc/init.d/probe-init || {
+    echo "❌ probe-init does not enforce root ownership of /root at boot"
+    exit 1
+}
+echo "    ✓ probe-init repairs ownership at boot"
+
+if [ -f build/rpi-probe.apkovl.tar.gz ]; then
+    BAD="$(tar --numeric-owner -tvzf build/rpi-probe.apkovl.tar.gz \
+        | awk '$2 != "0/0" { print $2, $NF }')"
+    if [ -n "$BAD" ]; then
+        echo "❌ apkovl entries not owned by uid/gid 0:"
+        echo "$BAD"
+        exit 1
+    fi
+    echo "    ✓ Built apkovl is fully root-owned"
+fi
+
 echo "✅ All pre-flight APKOVL validation checks passed successfully!"

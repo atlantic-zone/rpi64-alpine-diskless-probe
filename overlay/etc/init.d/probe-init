@@ -59,16 +59,21 @@ start() {
     fi
 
     # 6. SSH Authorized Keys (Multi-URL supported, default: ts-sz.keys)
+    #    sshd StrictModes reads the whole chain and accepts a key only when
+    #    /root, /root/.ssh and authorized_keys are owned by root with 700/600.
+    #    Enforcing it here repairs a card written from an older image too.
     SSH_KEYS_URL="${SSH_KEYS_URL:-https://github.com/ts-sz.keys}"
     mkdir -p /root/.ssh
-    chmod 700 /root/.ssh
     if [ -n "${SSH_KEYS_URL}" ]; then
         for url in ${SSH_KEYS_URL}; do
             curl -sSL --max-time 15 "${url}" >> /root/.ssh/authorized_keys 2>/dev/null || true
         done
         sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys 2>/dev/null || true
-        chmod 600 /root/.ssh/authorized_keys
     fi
+    chown -R root:root /root
+    chmod 700 /root/.ssh
+    [ -f /root/.ssh/authorized_keys ] && chmod 600 /root/.ssh/authorized_keys
+    einfo "SSH keys: $(grep -c . /root/.ssh/authorized_keys 2>/dev/null || echo 0) authorized"
 
     # 7. Network Setup (Default: DHCP on eth0/wlan0)
     if [ -n "${STATIC_IP}" ]; then
