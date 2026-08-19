@@ -1,0 +1,23 @@
+
+    _  _____ _        _    _   _ _____ ___ ____
+   / \|_   _| |      / \  | \ | |_   _|_ _/ ___|
+  / _ \ | | | |     / _ \ |  \| | | |  | | |
+ / ___ \| | | |___ / ___ \| |\  | | |  | | |___
+/_/   \_\_| |_____/_/   \_\_| \_|_|_| |___\____|   Z O N E
+
+ Atlantic Zone Environmental Probe - Alpine Linux diskless (100% RAM)
+
+   Host      rpi-probe            SSH      port 34522, key only
+   Storage   tmpfs, volatile      Metrics  node-exporter on :9100
+   Sensors   DS18B20 on 1-Wire    Config   probe.conf on the SD card
+
+ Everything under / lives in RAM and resets on reboot. Persistent changes
+ belong on the SD card boot partition, mounted at /media/mmcblk0p1.
+
+ Useful commands
+   probe-inventory        hardware, network, sensors and service summary
+   rc-status              service states
+   cat /sys/bus/w1/devices/*/w1_slave    raw sensor readings
+
+ Support: Atlantic Zone - https://github.com/atlantic-zone
+

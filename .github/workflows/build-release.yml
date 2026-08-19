@@ -54,10 +54,10 @@ jobs:
           echo "Downloading official Alpine RPi aarch64 release..."
           curl -sSL "${TARBALL_URL}" | tar -xzf - -C staging/
           
-          echo "Building apkovl overlay..."
+          echo "Preparing the apkovl build..."
           chmod +x build-apkovl.sh
-          ./build-apkovl.sh
-          cp build/rpi-probe.apkovl.tar.gz staging/localhost.apkovl.tar.gz
+          # build-apkovl.sh runs after the boot repository step, because the
+          # overlay has to carry the public key that signs the repository index.
           
           echo "Injecting custom boot configurations..."
           cp boot/usercfg.txt staging/usercfg.txt
@@ -65,13 +65,77 @@ jobs:
           cp probe.conf staging/probe.conf
           cp probe.conf.example staging/probe.conf.example
           
-          echo "Pre-downloading APK packages into /cache..."
-          mkdir -p staging/cache
-          
-          # Use alpine aarch64 docker container to fetch packages and dependencies
-          docker run --rm -v $(pwd)/staging/cache:/cache -v $(pwd)/overlay/etc/apk/world:/world:ro \
+          echo "Building the offline boot repository..."
+          # The initramfs installs the world file from the directories flagged by
+          # a .boot_repository marker, and reads each one through its APKINDEX.
+          # Packages therefore have to live in an indexed boot repository to be
+          # installed at boot: probe-apks/ is that repository.
+          #
+          # apk requires a signed index, so the build generates a key pair, signs
+          # the index with the private half and ships the public half inside the
+          # apkovl at /etc/apk/keys/. The initramfs merges the Alpine keys into
+          # the same directory, so both sets are trusted on the running probe.
+          #
+          # --rewrite-arch records every package as aarch64, which is how the
+          # official alpine-rpi index handles noarch subpackages such as
+          # prometheus-node-exporter-openrc: apk resolves them under <repo>/aarch64/.
+          mkdir -p staging/probe-apks/aarch64 overlay/etc/apk/keys keys
+
+          docker run --rm \
+            -v $(pwd)/staging/probe-apks/aarch64:/repo \
+            -v $(pwd)/overlay/etc/apk/world:/world:ro \
+            -v $(pwd)/keys:/keys \
             arm64v8/alpine:${ALPINE_VER} \
-            sh -c "apk update && apk fetch --recursive -o /cache \$(cat /world)"
+            sh -c '
+              set -e
+              apk add --quiet alpine-sdk
+              abuild-keygen -a -n -q
+              KEY=$(ls /root/.abuild/*.rsa | head -1)
+              apk update --quiet
+              apk fetch --quiet --recursive -o /repo $(cat /world)
+              cd /repo
+              apk index --quiet --rewrite-arch aarch64 -o index.tar.gz *.apk
+              abuild-sign -k "$KEY" index.tar.gz
+              mv index.tar.gz APKINDEX.tar.gz
+              cp "${KEY}.pub" /keys/
+            '
+
+          cp keys/*.rsa.pub overlay/etc/apk/keys/
+          touch staging/probe-apks/.boot_repository
+
+          echo "Boot repository: $(ls staging/probe-apks/aarch64/*.apk | wc -l) packages"
+          echo "Signing key shipped in the apkovl: $(ls overlay/etc/apk/keys/)"
+
+          # The apkovl carries the public key, so it is rebuilt now that the key exists.
+          ./build-apkovl.sh
+          cp build/rpi-probe.apkovl.tar.gz staging/localhost.apkovl.tar.gz
+
+          # Every package named in the world file must be resolvable from the
+          # boot repository, otherwise the probe boots without those binaries.
+          docker run --rm \
+            -v $(pwd)/staging/probe-apks:/repo:ro \
+            -v $(pwd)/overlay/etc/apk/world:/world:ro \
+            -v $(pwd)/overlay/etc/apk/keys:/pub:ro \
+            arm64v8/alpine:${ALPINE_VER} \
+            sh -c '
+              set -e
+              mkdir -p /target/etc/apk/keys
+              apk add --root /target --initdb --quiet
+              cp -a /etc/apk/keys/. /target/etc/apk/keys/
+              cp /pub/*.pub /target/etc/apk/keys/
+              apk add --root /target --repository /repo --no-network \
+                  --initramfs-diskless-boot --clean-protected $(cat /world)
+              for f in usr/bin/curl usr/bin/node_exporter usr/sbin/sshd \
+                       etc/init.d/node-exporter etc/init.d/sshd etc/conf.d/node-exporter; do
+                  if [ -e "/target/$f" ]; then
+                      echo "  present: /$f"
+                  else
+                      echo "ERROR: /$f absent after an offline boot install" >&2
+                      exit 1
+                  fi
+              done
+              echo "Offline boot install verified."
+            '
           
           echo "Packing final distribution archive..."
           STEPS_TAG="${{ steps.tagger.outputs.TAG_NAME }}"
@@ -104,7 +168,8 @@ jobs:
             - **CalVer Standard Tagging:** Versioned by date (`vYYYY.MM.DD.RUN`).
             - **Real QEMU Integration Test:** Live boot smoke-tested in CI via QEMU AArch64.
             - **Automated QA Validation:** Passed syntax, OpenRC dependency, and kernel module checks.
-            - **Pre-cached APKs:** All packages pre-downloaded in `/cache` for offline/diskless boot.
+            - **Offline boot repository:** every package in the world file ships in a signed, indexed `probe-apks/` repository, so `curl`, `tmux`, `node_exporter` and the OpenRC service scripts are installed on the running probe at first boot.
+            - **Branded console:** Atlantic Zone MOTD with the probe's operating facts and its useful commands.
           make_latest: "true"
           files: dist/*.tar.gz
         env:

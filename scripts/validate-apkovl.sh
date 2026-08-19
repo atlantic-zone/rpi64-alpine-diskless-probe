@@ -145,4 +145,41 @@ if [ -f build/rpi-probe.apkovl.tar.gz ]; then
     echo "    ✓ Built apkovl is fully root-owned"
 fi
 
+# 8. Offline boot repository and branded MOTD
+# The initramfs installs the world file from the directories carrying a
+# .boot_repository marker and reads each one through its APKINDEX, so the
+# workflow has to build an indexed, signed repository for the probe packages.
+echo "  [8/8] Validating the offline boot repository and the MOTD..."
+
+WF=".github/workflows/build-release.yml"
+for token in 'probe-apks' '.boot_repository' 'apk index' 'abuild-sign' '--rewrite-arch aarch64'; do
+    if ! grep -q -- "$token" "$WF"; then
+        echo "❌ ${WF} is missing the boot repository step: $token"
+        exit 1
+    fi
+done
+echo "    ✓ Workflow builds a signed, indexed boot repository"
+
+# --rewrite-arch keeps noarch subpackages such as prometheus-node-exporter-openrc
+# resolvable, because apk looks them up under <repo>/aarch64/.
+if ! grep -q 'apk add --root /target' "$WF"; then
+    echo "❌ ${WF} never verifies an offline install of the world file"
+    exit 1
+fi
+echo "    ✓ Workflow verifies an offline boot install"
+
+if [ ! -f overlay/etc/motd ]; then
+    echo "❌ Missing overlay/etc/motd"
+    exit 1
+fi
+if ! grep -qi 'atlantic zone' overlay/etc/motd; then
+    echo "❌ overlay/etc/motd carries no Atlantic Zone branding"
+    exit 1
+fi
+if LC_ALL=C grep -qP '[^\x00-\x7F]' overlay/etc/motd 2>/dev/null; then
+    echo "❌ overlay/etc/motd holds non-ASCII characters (the serial console renders ASCII)"
+    exit 1
+fi
+echo "    ✓ Branded ASCII MOTD present"
+
 echo "✅ All pre-flight APKOVL validation checks passed successfully!"

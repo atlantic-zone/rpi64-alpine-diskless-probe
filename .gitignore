@@ -1,0 +1,15 @@
+# Build output
+build/
+dist/
+staging/
+
+# Repository signing material generated during the build.
+# The private half stays inside the build container; only the public key is
+# copied into overlay/etc/apk/keys/ and shipped in the apkovl.
+keys/
+*.rsa
+overlay/etc/apk/keys/*.pub
+
+# Scratch
+tmp/
+*.tar.gz
