@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, archlinux]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -110,6 +110,16 @@ jobs:
           files: dist/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy Latest Release to Local FOG Server (/var/www/fog/os/rpi-probe/)
+        run: |
+          echo "Deploying release to local FOG server via internal LAN..."
+          mkdir -p /tmp/fog-deploy
+          tar -xzf dist/rpi64-alpine-diskless-probe-latest.tar.gz -C /tmp/fog-deploy
+          ssh -o StrictHostKeyChecking=no root@10.255.255.252 "mkdir -p /var/www/fog/os/rpi-probe/"
+          rsync -avz --delete /tmp/fog-deploy/ root@10.255.255.252:/var/www/fog/os/rpi-probe/
+          rm -rf /tmp/fog-deploy
+          echo "✓ Successfully updated /var/www/fog/os/rpi-probe/ on FOG Server!"
 
       - name: Cleanup Old Releases (Keep Last 5 Releases)
         run: |
