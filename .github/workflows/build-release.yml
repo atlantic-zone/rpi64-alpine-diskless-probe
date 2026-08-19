@@ -11,7 +11,11 @@ permissions:
 
 jobs:
   build:
-    runs-on: [self-hosted, archlinux]
+    # Runner GitHub hebergé : le runner Arch auto-heberge n'est pas garanti en
+    # ligne, et un job qui l'attend reste en file sans erreur ni alerte.
+    # QEMU binfmt est installe par docker/setup-qemu-action, donc le conteneur
+    # arm64 du build fonctionne sur un hote x86.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -49,12 +53,6 @@ jobs:
           
           echo "Downloading official Alpine RPi aarch64 release..."
           curl -sSL "${TARBALL_URL}" | tar -xzf - -C staging/
-          
-          echo "Pre-downloading sshx binary (AArch64) into overlay/usr/local/bin..."
-          mkdir -p overlay/usr/local/bin
-          curl -sSL "https://sshx.s3.amazonaws.com/sshx-aarch64-unknown-linux-musl.tar.gz" | tar -xzf - -C overlay/usr/local/bin/ 2>/dev/null || \
-          curl -sSL "https://github.com/ekcho/sshx/releases/latest/download/sshx-aarch64-unknown-linux-musl.tar.gz" | tar -xzf - -C overlay/usr/local/bin/ 2>/dev/null || true
-          chmod +x overlay/usr/local/bin/sshx || true
           
           echo "Building apkovl overlay..."
           chmod +x build-apkovl.sh
@@ -99,26 +97,18 @@ jobs:
             Standalone **Alpine Linux Diskless (100% RAM)** distribution for Raspberry Pi 3, 4, and 5 (`aarch64` / `rpi64`).
             
             ### Included in this build:
-            - **Pre-baked `sshx` Binary:** Pre-installed in `/usr/local/bin/sshx` for manual/emergency remote web terminal assistance (not launched automatically).
+            - **Metriques Prometheus natives :** `node_exporter` sur le port `9100`, capteurs DS18B20 exposes automatiquement via hwmon.
+            - **Authentification optionnelle :** basic auth activee par une empreinte bcrypt dans `probe.conf` (aucun mot de passe en clair sur la carte SD).
+            - **SSH durci :** port `34522`, authentification par cle uniquement.
+            - **Zero configuration obligatoire :** la sonde demarre sans `probe.conf` (DHCP, clavier US, heure de Paris).
             - **CalVer Standard Tagging:** Versioned by date (`vYYYY.MM.DD.RUN`).
             - **Real QEMU Integration Test:** Live boot smoke-tested in CI via QEMU AArch64.
             - **Automated QA Validation:** Passed syntax, OpenRC dependency, and kernel module checks.
-            - **Dual-Mode Metrics Engine:** Busybox HTTPD Prometheus PULL Exporter (port `9100`) + VictoriaMetrics / InfluxDB PUSH Exporter.
             - **Pre-cached APKs:** All packages pre-downloaded in `/cache` for offline/diskless boot.
           make_latest: "true"
           files: dist/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Deploy Latest Release to Local FOG Server (/var/www/fog/os/rpi-probe/)
-        run: |
-          echo "Deploying release to local FOG server via internal LAN..."
-          mkdir -p /tmp/fog-deploy
-          tar -xzf dist/rpi64-alpine-diskless-probe-latest.tar.gz -C /tmp/fog-deploy
-          ssh -o StrictHostKeyChecking=no root@10.255.255.252 "mkdir -p /var/www/fog/os/rpi-probe/"
-          rsync -avz --delete /tmp/fog-deploy/ root@10.255.255.252:/var/www/fog/os/rpi-probe/
-          rm -rf /tmp/fog-deploy
-          echo "✓ Successfully updated /var/www/fog/os/rpi-probe/ on FOG Server!"
 
       - name: Cleanup Old Releases (Keep Last 5 Releases)
         run: |

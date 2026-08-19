@@ -1,10 +1,10 @@
 #!/sbin/openrc-run
 
-description="Initialize RPi Alpine probe settings, display IP on TTY console /etc/issue, and generate Telegraf configuration"
+description="Initialize RPi Alpine probe settings, configure node_exporter, display IP on TTY console /etc/issue"
 
 depend() {
     after localmount modules networking
-    before telegraf
+    before node-exporter
 }
 
 CONF_FILE="/media/mmcblk0p1/probe.conf"
@@ -45,10 +45,16 @@ start() {
     fi
 
     # 4. Keyboard Layout
+    # Alpine layout: /usr/share/bkeymaps/<pays>/<variante>.bmap.gz  (gzip)
+    # KEYMAP=us  -> us/us.bmap.gz     KEYMAP=us-intl -> us/us-intl.bmap.gz
     if [ -n "${KEYMAP}" ]; then
         echo "KEYMAP=${KEYMAP}" > /etc/conf.d/keymaps
-        if command -v loadkmap >/dev/null 2>&1 && [ -f "/usr/share/bkeymaps/${KEYMAP}.bkm" ]; then
-            loadkmap < "/usr/share/bkeymaps/${KEYMAP}.bkm" 2>/dev/null || true
+        KM_CC="${KEYMAP%%-*}"
+        KM_FILE="/usr/share/bkeymaps/${KM_CC}/${KEYMAP}.bmap.gz"
+        if command -v loadkmap >/dev/null 2>&1 && [ -f "${KM_FILE}" ]; then
+            zcat "${KM_FILE}" | loadkmap 2>/dev/null || true
+        else
+            ewarn "Keymap ${KEYMAP} introuvable (${KM_FILE}), clavier US par defaut"
         fi
     fi
 
@@ -132,60 +138,18 @@ EOF
         sed -i "s/gpiopin=[0-9]*/gpiopin=${GPIO_PIN}/" /media/mmcblk0p1/usercfg.txt 2>/dev/null || true
     fi
 
-    # 10. Generate Industrial Telegraf Config (/etc/telegraf/telegraf.conf)
-    mkdir -p /etc/telegraf
-    cat > /etc/telegraf/telegraf.conf <<EOF
-[global_tags]
-  hostname = "${HOSTNAME}"
-  location = "${LOCATION}"
+    # 10. Prometheus node_exporter : options de lancement et authentification
+    #     Les deux scripts s'executent une seule fois, ici, avant le demarrage
+    #     du service. Pas de cron.
+    mkdir -p /var/lib/node_exporter
+    chown prometheus:prometheus /var/lib/node_exporter 2>/dev/null || true
 
-[agent]
-  interval = "${INTERVAL_SECONDS}s"
-  round_interval = true
-  metric_batch_size = 1000
-  metric_buffer_limit = 10000
-  collection_jitter = "0s"
-  flush_interval = "10s"
-
-[[inputs.temp]]
-
-[[inputs.system]]
-
-[[inputs.cpu]]
-  percpu = false
-  totalcpu = true
-
-[[inputs.mem]]
-
-[[inputs.disk]]
-  mount_points = ["/media/mmcblk0p1", "/"]
-
-[[inputs.net]]
-  interfaces = ["eth0", "wlan0"]
-
-[[outputs.prometheus_client]]
-  listen = ":9100"
-  path = "/metrics"
-EOF
-
-    if [ -n "${VICTORIAMETRICS_URL}" ]; then
-        cat >> /etc/telegraf/telegraf.conf <<EOF
-
-[[outputs.http]]
-  url = "${VICTORIAMETRICS_URL}"
-  data_format = "prometheus"
-EOF
+    if [ -x /usr/local/bin/probe-exporter-auth ]; then
+        /usr/local/bin/probe-exporter-auth || ewarn "probe-exporter-auth a echoue"
     fi
 
-    if [ -n "${INFLUXDB_URL}" ]; then
-        cat >> /etc/telegraf/telegraf.conf <<EOF
-
-[[outputs.influxdb_v2]]
-  urls = ["${INFLUXDB_URL}"]
-  token = "${INFLUXDB_TOKEN}"
-  organization = "${INFLUXDB_ORG}"
-  bucket = "${INFLUXDB_BUCKET}"
-EOF
+    if [ -x /usr/local/bin/probe-inventory ]; then
+        /usr/local/bin/probe-inventory || ewarn "probe-inventory a echoue"
     fi
 
     # 11. Synchronize Time via NTP and Generate /etc/issue Banner
@@ -217,7 +181,7 @@ EOF
   Hostname     : ${HOSTNAME}
   IP Address   : ${PRIMARY_IP}
   Metrics PULL : http://${PRIMARY_IP}:9100/metrics
-  SSH Access   : ssh root@${PRIMARY_IP}
+  SSH Access   : ssh -p 34522 root@${PRIMARY_IP}
 ================================================================================
 
 EOF

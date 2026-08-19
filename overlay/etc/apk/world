@@ -4,11 +4,11 @@ curl
 busybox-mdev-openrc
 busybox-extras
 chrony
-vim
 tmux
+tzdata
+kbd-bkeymaps
 wpa_supplicant
 wireless-regdb
 linux-firmware-brcm
-tzdata
-kbd-bkeymaps
-telegraf
+prometheus-node-exporter
+prometheus-node-exporter-openrc

@@ -1,22 +1,22 @@
 #!/bin/sh
-# /opt/data/workspace/1_projects/105_rpi64-alpine-diskless-probe/scripts/validate-apkovl.sh
-# Automated pre-flight validation of the built apkovl overlay and dependencies.
+# scripts/validate-apkovl.sh
+# Validation pre-vol de l'overlay apkovl et de ses dependances.
 
 set -e
 
 echo "🔍 Running pre-flight APKOVL & Kernel validation checks..."
 
-# 1. Syntax check on all shell scripts
-echo "  [1/4] Checking shell script syntax..."
-for s in overlay/etc/init.d/* build-apkovl.sh; do
+# 1. Syntaxe de tous les scripts shell
+echo "  [1/6] Checking shell script syntax..."
+for s in overlay/etc/init.d/* overlay/usr/local/bin/* build-apkovl.sh; do
     if [ -f "$s" ]; then
         sh -n "$s" || { echo "❌ Syntax error in $s"; exit 1; }
         echo "    ✓ Syntax OK: $s"
     fi
 done
 
-# 2. Check required kernel modules presence
-echo "  [2/4] Validating kernel modules in overlay/etc/modules..."
+# 2. Modules noyau requis
+echo "  [2/6] Validating kernel modules in overlay/etc/modules..."
 REQUIRED_MODULES="w1-gpio w1-therm af_packet cfg80211 brcmfmac"
 for mod in $REQUIRED_MODULES; do
     if grep -q "^${mod}$" overlay/etc/modules; then
@@ -27,9 +27,9 @@ for mod in $REQUIRED_MODULES; do
     fi
 done
 
-# 3. Check required packages in world file
-echo "  [3/4] Validating APK packages in overlay/etc/apk/world..."
-REQUIRED_PKGS="alpine-base openssh curl busybox-mdev-openrc busybox-extras chrony vim tmux wpa_supplicant tzdata kbd-bkeymaps telegraf"
+# 3. Paquets requis dans world
+echo "  [3/6] Validating APK packages in overlay/etc/apk/world..."
+REQUIRED_PKGS="alpine-base openssh curl busybox-mdev-openrc busybox-extras chrony tmux wpa_supplicant tzdata kbd-bkeymaps prometheus-node-exporter prometheus-node-exporter-openrc"
 for pkg in $REQUIRED_PKGS; do
     if grep -q "^${pkg}$" overlay/etc/apk/world; then
         echo "    ✓ Package present: $pkg"
@@ -39,8 +39,18 @@ for pkg in $REQUIRED_PKGS; do
     fi
 done
 
-# 4. Check OpenRC init script dependencies and permissions
-echo "  [4/4] Validating OpenRC script permissions and stanzas..."
+# Aucun paquet ne doit servir a hacher un mot de passe sur la sonde :
+# le hash bcrypt est fabrique par l'admin sur sa machine.
+for pkg in apache2-utils apr apr-util telegraf; do
+    if grep -q "^${pkg}$" overlay/etc/apk/world; then
+        echo "❌ Paquet interdit dans world: $pkg"
+        exit 1
+    fi
+done
+echo "    ✓ Aucun paquet interdit"
+
+# 4. Scripts OpenRC : permissions et depend()
+echo "  [4/6] Validating OpenRC script permissions and stanzas..."
 for script in overlay/etc/init.d/*; do
     if [ -f "$script" ]; then
         if [ ! -x "$script" ]; then
@@ -52,21 +62,43 @@ for script in overlay/etc/init.d/*; do
     fi
 done
 
-# 5. Check Telegraf root configuration and runlevels in build-apkovl.sh
-echo "  [5/5] Validating Telegraf config and runlevel definitions..."
-if [ ! -f "overlay/etc/conf.d/telegraf" ] || ! grep -q 'command_user="root:root"' overlay/etc/conf.d/telegraf; then
-    echo "❌ Missing command_user=\"root:root\" in overlay/etc/conf.d/telegraf"
+# 5. Scripts de la sonde presents et appeles au boot
+echo "  [5/6] Validating probe helper scripts..."
+for helper in probe-inventory probe-exporter-auth; do
+    if [ ! -f "overlay/usr/local/bin/${helper}" ]; then
+        echo "❌ Missing overlay/usr/local/bin/${helper}"
+        exit 1
+    fi
+    if ! grep -q "/usr/local/bin/${helper}" overlay/etc/init.d/probe-init; then
+        echo "❌ ${helper} jamais appele par probe-init"
+        exit 1
+    fi
+    echo "    ✓ Helper OK: ${helper}"
+done
+
+# 'usr' doit etre empaquete, sinon les helpers n'arrivent pas sur la sonde
+if ! grep -q 'usr' build-apkovl.sh; then
+    echo "❌ build-apkovl.sh n'empaquete pas overlay/usr"
     exit 1
 fi
-echo "    ✓ Telegraf root user config OK"
+echo "    ✓ overlay/usr empaquete"
 
+# Aucun mot de passe en clair dans les fichiers de conf livres
+if grep -qE '^[[:space:]]*EXPORTER_PASSWORD=' probe.conf probe.conf.example 2>/dev/null; then
+    echo "❌ EXPORTER_PASSWORD (clair) present : utiliser EXPORTER_PASSWORD_HASH"
+    exit 1
+fi
+echo "    ✓ Aucun mot de passe en clair"
+
+# 6. Reseau et runlevels
+echo "  [6/6] Validating network config and runlevel definitions..."
 if [ ! -f "overlay/etc/network/interfaces" ]; then
     echo "❌ Missing overlay/etc/network/interfaces"
     exit 1
 fi
 echo "    ✓ Default network interfaces OK"
 
-REQUIRED_RUNLEVELS="sysinit/modloop boot/modules boot/networking boot/chronyd boot/probe-init default/telegraf default/sshd"
+REQUIRED_RUNLEVELS="sysinit/modloop boot/modules boot/networking boot/chronyd boot/probe-init default/node-exporter default/sshd"
 for rl in $REQUIRED_RUNLEVELS; do
     if ! grep -q "$rl" build-apkovl.sh; then
         echo "❌ Missing runlevel definition $rl in build-apkovl.sh"
@@ -74,5 +106,10 @@ for rl in $REQUIRED_RUNLEVELS; do
     fi
 done
 echo "    ✓ Runlevel symlinks OK"
+
+# SSH durci
+grep -q "^Port 34522$" overlay/etc/ssh/sshd_config || { echo "❌ SSH port != 34522"; exit 1; }
+grep -q "^PasswordAuthentication no$" overlay/etc/ssh/sshd_config || { echo "❌ PasswordAuthentication non desactive"; exit 1; }
+echo "    ✓ SSH hardening OK"
 
 echo "✅ All pre-flight APKOVL validation checks passed successfully!"

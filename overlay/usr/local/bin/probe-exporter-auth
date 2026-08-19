@@ -1,0 +1,54 @@
+#!/bin/sh
+# probe-exporter-auth - execute UNE SEULE FOIS au boot par probe-init
+#
+# Ecrit /etc/conf.d/node-exporter.
+#
+#   EXPORTER_PASSWORD_HASH absent  -> exporter ouvert, pas de --web.config.file
+#   EXPORTER_PASSWORD_HASH present -> basic auth, --web.config.file actif
+#
+# Le hash bcrypt est fabrique PAR L'ADMIN sur sa machine, pas par la sonde.
+# Aucun mot de passe en clair ne touche la carte SD ni la RAM du Pi.
+# Voir probe.conf.example pour la commande de generation.
+
+CONF="/media/mmcblk0p1/probe.conf"
+WEB="/etc/node_exporter/web.yml"
+OUT="/etc/conf.d/node-exporter"
+
+[ -f "$CONF" ] && . "$CONF" 2>/dev/null
+
+BASE="--web.listen-address=:9100 \
+--collector.textfile.directory=/var/lib/node_exporter \
+--no-collector.btrfs --no-collector.xfs --no-collector.nvme \
+--no-collector.bcache --no-collector.infiniband --no-collector.zfs \
+--no-collector.nfs --no-collector.nfsd --no-collector.mdadm \
+--no-collector.selinux --no-collector.tapestats --no-collector.fibrechannel"
+
+USER_NAME="${EXPORTER_USER:-probe}"
+
+# Un hash bcrypt commence par $2a$ / $2b$ / $2y$ et fait 60 caracteres.
+# Tout le reste est refuse : un mot de passe en clair pose la par erreur
+# ne doit pas produire une auth silencieusement inoperante.
+case "$EXPORTER_PASSWORD_HASH" in
+    '$2a$'*|'$2b$'*|'$2y$'*)
+        mkdir -p /etc/node_exporter
+        TMP="${WEB}.$$"
+        printf 'basic_auth_users:\n  %s: %s\n' "$USER_NAME" "$EXPORTER_PASSWORD_HASH" > "$TMP"
+        chmod 600 "$TMP"
+        chown prometheus:prometheus "$TMP" 2>/dev/null
+        mv "$TMP" "$WEB"
+        ARGS="$BASE --web.config.file=$WEB"
+        ;;
+    '')
+        rm -f "$WEB"
+        ARGS="$BASE"
+        ;;
+    *)
+        # valeur presente mais pas un hash bcrypt : on refuse et on trace
+        rm -f "$WEB"
+        ARGS="$BASE"
+        echo "probe-exporter-auth: EXPORTER_PASSWORD_HASH invalide (bcrypt attendu), exporter laisse ouvert" >&2
+        ;;
+esac
+
+printf 'ARGS="%s"\n' "$ARGS" > "$OUT"
+chmod 644 "$OUT"

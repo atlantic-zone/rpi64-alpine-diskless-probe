@@ -1,0 +1,30 @@
+#!/bin/sh
+# probe-inventory - execute UNE SEULE FOIS au boot par probe-init
+#
+# Publie le SEUL renseignement que la machine ne peut pas deviner :
+# a qui elle appartient et ou elle est posee.
+#
+# Tout le reste est deja natif dans node_exporter :
+#   temperature capteurs -> node_hwmon_temp_celsius{chip="w1_bus_master1_..."}
+#   hostname / kernel    -> node_uname_info
+#   uptime, cpu, ram...  -> collecteurs standards
+#
+# Jointure cote Prometheus (le label instance est ajoute par le scrape) :
+#   node_hwmon_temp_celsius{chip=~"w1_bus_master.*"}
+#     * on(instance) group_left(client,site,location) probe_info
+
+OUT="/var/lib/node_exporter/probe_inventory.prom"
+TMP="${OUT}.$$"
+CONF="/media/mmcblk0p1/probe.conf"
+
+[ -f "$CONF" ] && . "$CONF" 2>/dev/null
+
+{
+  echo "# HELP probe_info Rattachement de la sonde"
+  echo "# TYPE probe_info gauge"
+  printf 'probe_info{client="%s",site="%s",location="%s"} 1\n' \
+    "${CLIENT:-unset}" "${SITE:-unset}" "${LOCATION:-unset}"
+} > "$TMP"
+
+chmod 644 "$TMP"
+mv "$TMP" "$OUT"

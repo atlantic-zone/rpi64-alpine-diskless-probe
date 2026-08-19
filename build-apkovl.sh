@@ -14,8 +14,13 @@ echo "Building Alpine apkovl overlay: ${BUILD_DIR}/${APKOVL_NAME}"
 
 # Ensure executable permissions on scripts
 chmod 755 "${OVERLAY_DIR}/etc/init.d/probe-init"
+chmod 755 "${OVERLAY_DIR}/usr/local/bin/probe-inventory"
+chmod 755 "${OVERLAY_DIR}/usr/local/bin/probe-exporter-auth"
 
 # Create runlevel symlinks
+# On repart d'un etat propre : un symlink orphelin (service supprime du world)
+# resterait sinon dans l'apkovl et ferait echouer OpenRC au boot.
+rm -rf "${OVERLAY_DIR}/etc/runlevels"
 mkdir -p "${OVERLAY_DIR}/etc/runlevels/sysinit"
 mkdir -p "${OVERLAY_DIR}/etc/runlevels/boot"
 mkdir -p "${OVERLAY_DIR}/etc/runlevels/default"
@@ -36,7 +41,7 @@ ln -sf /etc/init.d/probe-init "${OVERLAY_DIR}/etc/runlevels/boot/probe-init"
 
 # Default runlevel
 ln -sf /etc/init.d/sshd "${OVERLAY_DIR}/etc/runlevels/default/sshd"
-ln -sf /etc/init.d/telegraf "${OVERLAY_DIR}/etc/runlevels/default/telegraf"
+ln -sf /etc/init.d/node-exporter "${OVERLAY_DIR}/etc/runlevels/default/node-exporter"
 
 # Fetch default SSH authorized keys if missing
 if [ ! -f "${OVERLAY_DIR}/root/.ssh/authorized_keys" ]; then
@@ -48,10 +53,19 @@ fi
 
 # Package apkovl
 cd "${OVERLAY_DIR}"
-if [ -d "root" ]; then
-    tar -czf "${BUILD_DIR}/${APKOVL_NAME}" etc root
-else
-    tar -czf "${BUILD_DIR}/${APKOVL_NAME}" etc
-fi
+# 'usr' contient probe-inventory et probe-exporter-auth : sans lui, les deux
+# scripts n'arrivent jamais sur la sonde et probe-init echoue au boot.
+TAR_DIRS="etc"
+[ -d "root" ] && TAR_DIRS="${TAR_DIRS} root"
+[ -d "usr" ]  && TAR_DIRS="${TAR_DIRS} usr"
+tar -czf "${BUILD_DIR}/${APKOVL_NAME}" ${TAR_DIRS}
+
+# Garde-fou : le build echoue si les scripts ne sont pas dans l'archive.
+for f in usr/local/bin/probe-inventory usr/local/bin/probe-exporter-auth; do
+    if ! tar -tzf "${BUILD_DIR}/${APKOVL_NAME}" | grep -qx "$f"; then
+        echo "ERREUR: $f absent de l'apkovl" >&2
+        exit 1
+    fi
+done
 
 echo "Apkovl created successfully: ${BUILD_DIR}/${APKOVL_NAME}"
