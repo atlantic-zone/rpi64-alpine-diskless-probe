@@ -1,15 +1,15 @@
 #!/bin/sh
-# probe-inventory - execute UNE SEULE FOIS au boot par probe-init
+# probe-inventory - runs EXACTLY ONCE at boot, called by probe-init
 #
-# Publie le SEUL renseignement que la machine ne peut pas deviner :
-# a qui elle appartient et ou elle est posee.
+# Publishes the only piece of information the machine cannot work out by
+# itself: who owns it and where it is installed.
 #
-# Tout le reste est deja natif dans node_exporter :
-#   temperature capteurs -> node_hwmon_temp_celsius{chip="w1_bus_master1_..."}
-#   hostname / kernel    -> node_uname_info
-#   uptime, cpu, ram...  -> collecteurs standards
+# Everything else is already native in node_exporter:
+#   sensor temperature -> node_hwmon_temp_celsius{chip="w1_bus_master1_..."}
+#   hostname / kernel  -> node_uname_info
+#   uptime, cpu, ram   -> standard collectors
 #
-# Jointure cote Prometheus (le label instance est ajoute par le scrape) :
+# Join on the Prometheus side (the instance label is added by the scrape):
 #   node_hwmon_temp_celsius{chip=~"w1_bus_master.*"}
 #     * on(instance) group_left(client,site,location) probe_info
 
@@ -20,7 +20,7 @@ CONF="/media/mmcblk0p1/probe.conf"
 [ -f "$CONF" ] && . "$CONF" 2>/dev/null
 
 {
-  echo "# HELP probe_info Rattachement de la sonde"
+  echo "# HELP probe_info Probe ownership and physical location labels"
   echo "# TYPE probe_info gauge"
   printf 'probe_info{client="%s",site="%s",location="%s"} 1\n' \
     "${CLIENT:-unset}" "${SITE:-unset}" "${LOCATION:-unset}"

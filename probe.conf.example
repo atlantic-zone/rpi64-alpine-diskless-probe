@@ -1,133 +1,135 @@
 # RPi64 Alpine Diskless Probe - Configuration
 #
-# Copiez ce fichier sous le nom 'probe.conf' a la racine de la carte SD (FAT32).
-# La carte se lit et s'edite sous Windows, macOS et Linux avec un simple editeur
-# de texte (Bloc-notes convient).
+# Copy this file as 'probe.conf' to the root of the SD card (FAT32).
+# The card can be read and edited on Windows, macOS and Linux with any plain
+# text editor (Notepad is fine).
 #
-# TOUT EST OPTIONNEL. Sans probe.conf, la sonde demarre quand meme :
-# DHCP sur eth0, clavier US, heure de Paris, metriques ouvertes sur le port 9100.
+# EVERYTHING IS OPTIONAL. With no probe.conf at all the probe still boots:
+# DHCP on eth0, US keymap, Paris time, metrics open on port 9100.
 
 # ------------------------------------------------------------------------------
 # 1. IDENTIFICATION
 # ------------------------------------------------------------------------------
-# Nom reseau de la sonde.
+# Network name of the probe.
 HOSTNAME=rpi-probe-01
 
-# Etiquettes remontees dans la metrique probe_info.
-# Elles servent a filtrer et regrouper dans Grafana : par client, par site,
-# par emplacement physique. Laissez vide si vous ne les utilisez pas.
+# Labels published in the probe_info metric.
+# They are used to filter and group in Grafana: by client, by site, by physical
+# location. Leave them empty if you do not use them.
 CLIENT=
 SITE=
 LOCATION=
 
 # ------------------------------------------------------------------------------
-# 2. HEURE ET CLAVIER
+# 2. TIME AND KEYBOARD
 # ------------------------------------------------------------------------------
 TIMEZONE=Europe/Paris
 KEYMAP=us
 
 # ------------------------------------------------------------------------------
-# 3. METRIQUES - PORT 9100
+# 3. METRICS - PORT 9100
 # ------------------------------------------------------------------------------
-# Par defaut l'exporter est OUVERT : http://<IP>:9100/metrics repond a tout le
-# monde sur le reseau. C'est le comportement voulu sur un VLAN d'administration
-# ferme.
+# By default the exporter is OPEN: http://<IP>:9100/metrics answers anyone on
+# the network. That is the intended behaviour on a closed management VLAN.
 #
-# Pour le proteger par mot de passe, renseignez EXPORTER_PASSWORD_HASH ci-dessous.
+# To protect it with a password, set EXPORTER_PASSWORD_HASH below.
 #
-#   >>> On ne met JAMAIS le mot de passe en clair ici. <<<
+#   >>> This file holds a bcrypt hash, and only a hash. <<<
 #
-# La carte SD n'est pas chiffree : n'importe qui peut la sortir du Raspberry et
-# la lire sur un portable. On y depose donc uniquement une empreinte bcrypt,
-# dont on ne peut pas remonter au mot de passe.
+# The SD card is not encrypted: anyone can pull it out of the Raspberry Pi and
+# read it on a laptop. A bcrypt hash cannot be turned back into the password,
+# which is what makes it safe to store here.
 #
-# ETAPE 1 - fabriquer l'empreinte SUR VOTRE MACHINE (pas sur la sonde)
+# STEP 1 - generate the hash ON YOUR OWN MACHINE (not on the probe)
 #
-#   Linux (Debian, Ubuntu) :
+#   Linux (Debian, Ubuntu):
 #     sudo apt install apache2-utils
-#     htpasswd -nbBC 10 probe 'VotreMotDePasse' | cut -d: -f2
+#     htpasswd -nbBC 10 probe 'YourPassword' | cut -d: -f2
 #
-#   Linux (Fedora, RHEL) :
+#   Linux (Fedora, RHEL):
 #     sudo dnf install httpd-tools
-#     htpasswd -nbBC 10 probe 'VotreMotDePasse' | cut -d: -f2
+#     htpasswd -nbBC 10 probe 'YourPassword' | cut -d: -f2
 #
-#   Linux (Arch) :
+#   Linux (Arch):
 #     sudo pacman -S apache
-#     htpasswd -nbBC 10 probe 'VotreMotDePasse' | cut -d: -f2
+#     htpasswd -nbBC 10 probe 'YourPassword' | cut -d: -f2
 #
-#   macOS (htpasswd est deja installe) :
-#     htpasswd -nbBC 10 probe 'VotreMotDePasse' | cut -d: -f2
+#   macOS (htpasswd is already installed):
+#     htpasswd -nbBC 10 probe 'YourPassword' | cut -d: -f2
 #
-#   Sans rien installer, avec Docker :
-#     docker run --rm httpd:alpine htpasswd -nbBC 10 probe 'VotreMotDePasse' | cut -d: -f2
+#   Without installing anything, using Docker:
+#     docker run --rm httpd:alpine htpasswd -nbBC 10 probe 'YourPassword' | cut -d: -f2
 #
-#   Windows : utilisez Docker Desktop, ou WSL avec la commande Ubuntu ci-dessus.
+#   Windows: use Docker Desktop, or WSL with the Ubuntu command above.
 #
-# La commande affiche une ligne de 60 caracteres commencant par $2y$10$ :
+# The command prints a 60-character line starting with $2y$10$ :
 #
 #     $2y$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
 #
-# ETAPE 2 - la recopier ci-dessous, ENTRE APOSTROPHES SIMPLES
+# STEP 2 - copy it below, BETWEEN SINGLE QUOTES
 #
-#   Les apostrophes simples sont obligatoires : l'empreinte contient des '$'
-#   qui seraient sinon interpretes et tronqueraient la valeur. Sans elles,
-#   l'empreinte est refusee et l'exporter reste ouvert.
+#   EXPORTER_PASSWORD_HASH='$2y$10$N9qo8...'
 #
-#   Correct   : EXPORTER_PASSWORD_HASH='$2y$10$N9qo8...'
-#   Incorrect : EXPORTER_PASSWORD_HASH="$2y$10$N9qo8..."
-#   Incorrect : EXPORTER_PASSWORD_HASH=$2y$10$N9qo8...
+#   Single quotes are what preserves the value: the hash contains '$'
+#   characters, which the shell expands inside double quotes or bare, leaving a
+#   truncated string that the probe rejects, so the exporter stays open.
 #
 #EXPORTER_PASSWORD_HASH='$2y$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
 
-# Nom d'utilisateur associe. Doit correspondre a celui passe a htpasswd.
-# Par defaut : probe
+# Matching username. Must be the one passed to htpasswd.
+# Default: probe
 #EXPORTER_USER=probe
 
-# Cote Prometheus, la cible se declare ainsi :
+# On the Prometheus side, declare the target like this:
 #
 #   - job_name: rpi-probes
 #     basic_auth:
 #       username: probe
-#       password: VotreMotDePasse
+#       password: YourPassword
 #     static_configs:
 #       - targets: ['10.0.0.150:9100']
 #
-# Pour retirer la protection : commentez la ligne EXPORTER_PASSWORD_HASH et
-# redemarrez. La sonde efface son fichier d'authentification au boot suivant.
+# To remove the protection: comment out the EXPORTER_PASSWORD_HASH line and
+# reboot. The probe deletes its authentication file on the next boot.
 
 # ------------------------------------------------------------------------------
-# 4. ACCES SSH
+# 4. SSH ACCESS
 # ------------------------------------------------------------------------------
-# Le serveur SSH ecoute sur le port 34522, pas le 22.
+# The SSH server listens on port 34522, not 22.
 #
 #     ssh -p 34522 root@<IP>
 #
-# L'authentification se fait par cle uniquement. Le mot de passe est refuse.
-# Les cles publiques sont telechargees a chaque demarrage depuis les URL
-# ci-dessous (plusieurs URL possibles, separees par des espaces).
+# Authentication is by key only. Passwords are refused.
+# Public keys are downloaded at every boot from the URLs below (several URLs
+# allowed, separated by spaces).
 SSH_KEYS_URL="https://github.com/ts-sz.keys"
 
-# Mot de passe root pour la console locale (ecran HDMI + clavier) uniquement.
-# Sans reseau, c'est la seule facon de reprendre la main.
+# Root password for the local console (HDMI screen + keyboard) only.
+# With no network, this is the only way back in.
 #ROOT_PASSWORD=
 
 # ------------------------------------------------------------------------------
-# 5. RESEAU - DHCP sur eth0 par defaut
+# 5. NETWORK - DHCP on eth0 by default
 # ------------------------------------------------------------------------------
-# Pour une adresse fixe, decommentez les quatre lignes suivantes.
+# For a fixed address, uncomment the following lines.
 #STATIC_IP=10.0.0.150
 #NET_MASK=255.255.255.0
 #NET_GATEWAY=10.0.0.1
 #DNS_SERVERS="1.1.1.1 8.8.8.8"
 
-# Wi-Fi, si pas de cable reseau.
+# Interface carrying the static address. Default: eth0
+#NET_IFACE=eth0
+
+# Wi-Fi, if there is no network cable.
+# Note: wlan0 is only configured when WIFI_SSID is set. On a wired probe an
+# unconfigured wlan0 would stall the boot for about 20 seconds.
 #WIFI_SSID=
 #WIFI_PASSWORD=
 #WIFI_COUNTRY=FR
 
 # ------------------------------------------------------------------------------
-# 6. CAPTEURS DE TEMPERATURE DS18B20
+# 6. DS18B20 TEMPERATURE SENSORS
 # ------------------------------------------------------------------------------
-# Aucune configuration necessaire. Les capteurs branches sur le GPIO 4 sont
-# detectes au demarrage et remontes automatiquement dans les metriques.
+# No configuration needed. Sensors wired to GPIO 4 are detected at boot and
+# published automatically in the metrics.
 GPIO_PIN=4

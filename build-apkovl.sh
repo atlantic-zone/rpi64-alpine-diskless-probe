@@ -19,7 +19,7 @@ chmod 755 "${OVERLAY_DIR}/usr/local/bin/probe-exporter-auth"
 
 # Create runlevel symlinks
 # On repart d'un etat propre : un symlink orphelin (service supprime du world)
-# resterait sinon dans l'apkovl et ferait echouer OpenRC au boot.
+# would otherwise stay in the apkovl and make OpenRC fail at boot.
 rm -rf "${OVERLAY_DIR}/etc/runlevels"
 mkdir -p "${OVERLAY_DIR}/etc/runlevels/sysinit"
 mkdir -p "${OVERLAY_DIR}/etc/runlevels/boot"
@@ -53,17 +53,17 @@ fi
 
 # Package apkovl
 cd "${OVERLAY_DIR}"
-# 'usr' contient probe-inventory et probe-exporter-auth : sans lui, les deux
-# scripts n'arrivent jamais sur la sonde et probe-init echoue au boot.
+# 'usr' holds probe-inventory and probe-exporter-auth: without it, neither
+# script ever reaches the probe and probe-init fails at boot.
 TAR_DIRS="etc"
 [ -d "root" ] && TAR_DIRS="${TAR_DIRS} root"
 [ -d "usr" ]  && TAR_DIRS="${TAR_DIRS} usr"
 tar -czf "${BUILD_DIR}/${APKOVL_NAME}" ${TAR_DIRS}
 
-# Garde-fou : le build echoue si les scripts ne sont pas dans l'archive.
+# Safety net: the build fails if the helper scripts are missing from the archive.
 for f in usr/local/bin/probe-inventory usr/local/bin/probe-exporter-auth; do
     if ! tar -tzf "${BUILD_DIR}/${APKOVL_NAME}" | grep -qx "$f"; then
-        echo "ERREUR: $f absent de l'apkovl" >&2
+        echo "ERROR: $f missing from the apkovl" >&2
         exit 1
     fi
 done

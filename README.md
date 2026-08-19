@@ -1,143 +1,271 @@
-# 🌡️ RPi64 Alpine Diskless Temperature Probe (`rpi64-alpine-diskless-probe`)
+# RPi64 Alpine Diskless Temperature Probe (`rpi64-alpine-diskless-probe`)
 
 [![Build & Release](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/actions/workflows/build-release.yml/badge.svg)](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/actions/workflows/build-release.yml)
 [![Security Gates](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/actions/workflows/security-scan.yml/badge.svg)](https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/actions/workflows/security-scan.yml)
 [![Platform: RPi 3, 4 & 5](https://img.shields.io/badge/Platform-Raspberry%20Pi%203%20%7C%204%20%7C%205-red.svg)](https://www.raspberrypi.com/)
 [![OS: Alpine Linux 64-bit](https://img.shields.io/badge/OS-Alpine%20Linux%2064--bit-blue.svg)](https://alpinelinux.org/)
 
-Standalone **Alpine Linux Diskless (100% RAM / tmpfs)** system distribution for Raspberry Pi 3, 4, and 5 (`aarch64` / `rpi64`) powered by **Telegraf** with 1-Wire DS18B20 temperature sensor probe and **Dual Metric Exporter Engine (Prometheus PULL + VictoriaMetrics / InfluxDB PUSH)**.
+Standalone **Alpine Linux Diskless (100% RAM / `tmpfs`)** image for Raspberry Pi 3, 4 and 5
+(`aarch64` / `rpi64`), exposing DS18B20 1-Wire temperature sensors and host telemetry through
+**Prometheus node_exporter**.
+
+**Write the image, insert the SD card, power on.** No configuration file is required.
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-- **100% Run-from-RAM (Diskless):** The entire system operates in memory (`tmpfs`). Zero write operations occur on the SD card during runtime, completely eliminating SD card corruption risks caused by power outages.
-- **Powered by Industrial Telegraf Engine:** Standardized telemetry collection powered by Telegraf plugins (`inputs.temp`, `inputs.system`, `inputs.cpu`, `inputs.mem`, `inputs.disk`, `inputs.net`).
-- **Universal RPi 3, 4 & 5 Compatibility:** Built on Alpine Linux `aarch64` (64-bit), natively supporting Raspberry Pi 3B/3B+, Raspberry Pi 4B, and Raspberry Pi 5.
-- **Dual Metric Engine (PULL + PUSH):**
-  - **Prometheus PULL Exporter:** Served on `http://<IP>:9100/metrics` via Telegraf's `outputs.prometheus_client`.
-  - **VictoriaMetrics PUSH:** HTTP POST Prometheus ingestion (`/api/v1/import/prometheus`).
-  - **InfluxDB PUSH:** Native InfluxDB Line Protocol HTTP POST ingestion.
-- **Simple FAT32 Configuration (`probe.conf`):** All parameters (`HOSTNAME`, `LOCATION`, `VICTORIAMETRICS_URL`, `INFLUXDB_URL`, `TIMEZONE`, `KEYMAP`, `STATIC_IP`, `WIFI_SSID`) are configured via a plain text file on the FAT32 root partition of the SD card.
-- **Automatic SSH Provisioning:** Dynamic fetch and injection of authorized SSH public keys via URL (supports single or multiple URLs).
-- **Wi-Fi & Ethernet Support:** Automatic fallback to Wi-Fi (`WIFI_SSID` / `WIFI_PASSWORD`) or Ethernet RJ45 connection (DHCP or Static IP).
-- **Embedded Admin Utilities:** Includes `telegraf`, `vim`, `tmux`, `curl`, `openssh`, `tzdata`, `kbd-bkeymaps`, and `wpa_supplicant`.
+- **100% run-from-RAM (diskless):** the whole system runs in `tmpfs`. Nothing is written to the
+  SD card at runtime, which removes the card-corruption failure mode caused by power cuts.
+- **Zero mandatory configuration:** with no `probe.conf` at all the probe still boots with DHCP on
+  `eth0`, US keymap, Europe/Paris timezone and an open exporter on port 9100.
+- **Native DS18B20 support:** sensors wired to GPIO 4 are discovered by the kernel and exported by
+  node_exporter as `node_hwmon_temp_celsius`. No agent, no parsing script, no cron.
+- **Prometheus PULL exporter:** `http://<IP>:9100/metrics`, open by default, optionally protected
+  by HTTP basic auth using a bcrypt hash (see `probe.conf.example`).
+- **Hardened SSH:** listens on port **34522**, key authentication only, passwords refused.
+  Authorized keys are fetched at every boot from the URLs listed in `SSH_KEYS_URL`.
+- **Ethernet and Wi-Fi:** DHCP or static IPv4 on `eth0`; Wi-Fi is configured only when `WIFI_SSID`
+  is set.
+- **Small footprint:** 14 top-level packages. Around 210 MB of RAM in use on a Pi 3B (~47% of the
+  available `tmpfs`).
 
 ---
 
-## 🔌 Hardware Wiring Specifications & WireViz Diagram
+## Hardware Wiring (DS18B20)
 
-Connect the **DS18B20 digital 1-Wire temperature sensor** to the Raspberry Pi 40-pin GPIO header:
+Connect the **DS18B20 1-Wire digital temperature sensor** to the 40-pin GPIO header:
 
-| Wire Color | Signal Name | Description | RPi Header Connection |
+| Wire Color | Signal | Description | RPi Header Pin |
 | :--- | :--- | :--- | :--- |
-| **RED** | `VCC` | Power (3.3V DC) | **Pin 1** (`3.3V Power`) |
+| **RED** | `VCC` | Power (3.3 V DC) | **Pin 1** (`3.3V`) |
 | **BLACK** | `GND` | Ground | **Pin 6** or **Pin 9** (`GND`) |
-| **YELLOW** | `DATA` | 1-Wire Data Line | **Pin 7** (`GPIO 4 / GPCLK0`) |
+| **YELLOW** | `DATA` | 1-Wire data line | **Pin 7** (`GPIO 4 / GPCLK0`) |
 
-> ⚠️ **CRITICAL LOGIC LEVEL WARNING:** Never connect the Red (VCC) wire to 5V (Pin 2 or Pin 4). DS18B20 sensors and Raspberry Pi GPIO pins operate strictly on **3.3V logic levels**. Connecting 5V to GPIO 4 will destroy the GPIO port!
+> **CRITICAL - LOGIC LEVEL:** the red (VCC) wire goes to **pin 1 (3.3 V)**. DS18B20 sensors and
+> Raspberry Pi GPIO pins operate strictly at **3.3 V**, and the 5 V rail on pins 2 and 4 destroys
+> the GPIO port on contact. Confirm the pin number before powering the board.
 
-### Electronic Wiring Harness Diagram (Generated via WireViz):
+### Wiring Harness Diagram (generated with WireViz)
 
-![DS18B20 Single Sensor Wiring Harness Diagram with 4.7kΩ Pull-Up Resistor (WireViz)](assets/wireviz-ds18b20.png)
+![DS18B20 single sensor wiring harness with 4.7k pull-up resistor (WireViz)](assets/wireviz-ds18b20.png)
 
 ```text
        Raspberry Pi Header (40-Pin)
        ---------------------------
        Pin 1 (3.3V) ───────┬────────────────────────────────────── Sensor RED (VCC)
-                           │                               
+                           │
                          [4.7kΩ] Resistor (Yellow-Violet-Red-Gold)
-                           │                               
+                           │
        Pin 7 (GPIO4)───────┼────────────────────────────────────── Sensor YELLOW (DATA)
-                           │                               
+                           │
        Pin 6 (GND)  ───────┴────────────────────────────────────── Sensor BLACK (GND)
 ```
 
-> 💡 **Pull-Up Resistor Requirement:** A **4.7 kΩ pull-up resistor** (1/4W, color code: Yellow-Violet-Red-Gold) is required between the **RED (3.3V)** line and the **YELLOW (DATA)** line for 1-Wire signal integrity.
+> **Pull-up resistor required:** a **4.7 kΩ** resistor (1/4 W, colour code Yellow-Violet-Red-Gold)
+> must sit between the **RED (3.3 V)** line and the **YELLOW (DATA)** line for 1-Wire signal
+> integrity.
+
+Several sensors can share the same data line: each one has a unique address and is exported
+separately.
 
 ---
 
-## 🛠️ SD Card Preparation Guide (macOS CLI / Terminal)
+## SD Card Preparation (macOS)
 
-On **macOS Terminal**, using raw disk devices (`/dev/rdiskX`) provides **10x to 20x faster** formatting and I/O operations by bypassing kernel buffer caching:
+On macOS, using the raw device (`/dev/rdiskX`) is 10x to 20x faster because it bypasses the kernel
+buffer cache.
 
-### 1. Identify your SD Card device
+### 1. Identify the SD card
+
 ```bash
 diskutil list
 ```
-*(Identify your SD Card device identifier, e.g. `/dev/disk2` or `/dev/disk3`).*
 
-### 2. Fast Format SD Card to FAT32 (using raw disk `rdiskX`)
+### 2. Format as FAT32
+
 ```bash
-# Bypasses kernel buffer cache for maximum speed (replace rdiskX with your device, e.g. rdisk2)
+# Replace rdiskX with your device, for example rdisk2
 diskutil eraseDisk FAT32 RPIPROBE MBRFormat /dev/rdiskX
 ```
 
-### 3. One-Liner Download & Extract to `/Volumes/RPIPROBE`
+### 3. Download and extract the release
+
 ```bash
 curl -sSL "https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/latest/download/rpi64-alpine-diskless-probe-latest.tar.gz" | tar -xzf - -C /Volumes/RPIPROBE/
 ```
 
-### 4. Edit `probe.conf` & Eject
+### 4. Eject
+
 ```bash
-nano /Volumes/RPIPROBE/probe.conf
 diskutil eject /dev/diskX
+```
+
+The card is ready. Editing `probe.conf` is optional: do it only if you need a fixed hostname,
+inventory labels, Wi-Fi or a static IP.
+
+On Linux, format with `mkfs.vfat -F 32 -n RPIPROBE /dev/sdX1` and extract the same archive to the
+mount point. On Windows, format as FAT32 and extract the archive to the root of the card with 7-Zip.
+
+---
+
+## `probe.conf` Reference
+
+The file lives at the root of the FAT32 partition (`/media/mmcblk0p1/probe.conf`) and is read once
+at boot. **Every variable is optional.**
+
+| Section | Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| **Identification** | `HOSTNAME` | `rpi-probe` | Network name of the probe. |
+| | `CLIENT` | *(empty)* | Inventory label exported in `probe_info`. |
+| | `SITE` | *(empty)* | Inventory label exported in `probe_info`. |
+| | `LOCATION` | *(empty)* | Inventory label exported in `probe_info`. |
+| **Regional** | `TIMEZONE` | `Europe/Paris` | System timezone, e.g. `Europe/Paris`, `UTC`. |
+| | `KEYMAP` | `us` | Console keyboard layout (`us`, `us-intl`, `fr`, `es`). |
+| **Metrics** | `EXPORTER_PASSWORD_HASH` | *(empty)* | bcrypt hash. Empty means the exporter is open. Must be quoted with **single** quotes. |
+| | `EXPORTER_USER` | `probe` | Username matching the hash. |
+| **SSH** | `SSH_KEYS_URL` | `https://github.com/ts-sz.keys` | Space-separated list of URLs to fetch public keys from. |
+| | `ROOT_PASSWORD` | *(empty)* | Root password for the local HDMI console only. |
+| **Network** | `STATIC_IP` | *(DHCP)* | Static IPv4 address. Leave unset for DHCP. |
+| | `NET_IFACE` | `eth0` | Interface carrying the static address. |
+| | `NET_MASK` | `255.255.255.0` | Subnet mask for the static address. |
+| | `NET_GATEWAY` | `.1` of the subnet | Default gateway. |
+| | `DNS_SERVERS` | *(system)* | Space-separated DNS servers, e.g. `"1.1.1.1 8.8.8.8"`. |
+| **Wi-Fi** | `WIFI_SSID` | *(empty)* | Wi-Fi SSID. When empty, `wlan0` is not configured at all. |
+| | `WIFI_PASSWORD` | *(empty)* | WPA2 passphrase. |
+| | `WIFI_COUNTRY` | `FR` | Two-letter ISO regulatory domain. |
+| **Sensors** | `GPIO_PIN` | `4` | GPIO pin carrying the 1-Wire data line. |
+
+Full commented reference, including how to generate the bcrypt hash: `probe.conf.example`.
+
+---
+
+## Metrics
+
+The exporter answers on `http://<IP>:9100/metrics`.
+
+DS18B20 readings appear natively, one series per sensor:
+
+```text
+node_hwmon_temp_celsius{chip="w1_bus_master1_28_0000007137f7",sensor="temp1"} 25.312
+```
+
+Inventory labels are published as a separate metric by `probe-inventory`:
+
+```text
+probe_info{client="example-studio",site="paris-nord",location="server-room"} 1
+```
+
+Join the two on the Prometheus side to attach inventory labels to every temperature reading:
+
+```promql
+node_hwmon_temp_celsius{chip=~"w1_bus_master.*"}
+  * on(instance) group_left(client, site, location) probe_info
+```
+
+Scrape configuration, with the exporter left open:
+
+```yaml
+- job_name: rpi-probes
+  static_configs:
+    - targets: ['10.0.0.150:9100']
+```
+
+With basic auth enabled:
+
+```yaml
+- job_name: rpi-probes
+  basic_auth:
+    username: probe
+    password: YourPassword
+  static_configs:
+    - targets: ['10.0.0.150:9100']
 ```
 
 ---
 
-## 📖 Complete `probe.conf` Variables Reference
+## Verification and Diagnostics
 
-| Section | Variable Name | Required | Default | Description / Value Format |
-| :--- | :--- | :---: | :---: | :--- |
-| **Metrics** | `HOSTNAME` | **Yes** | `rpi-probe-01` | Hostname of the Raspberry Pi. |
-| | `LOCATION` | **Yes** | `unspecified` | Geographic / room location tag sent to VictoriaMetrics/InfluxDB. |
-| | `INTERVAL_SECONDS` | No | `10` | Frequency of metric collection and push (in seconds). |
-| | `GPIO_PIN` | No | `4` | GPIO Pin used for 1-Wire Data Line. |
-| **Exporter**| `ENABLE_PULL_SERVER` | No | `true` | Enables Telegraf Prometheus PULL Exporter on port **9100**. |
-| **Push** | `VICTORIAMETRICS_URL` | No | *None* | HTTP Prometheus import endpoint (`/api/v1/import/prometheus`). |
-| | `INFLUXDB_URL` | No | *None* | InfluxDB Line Protocol HTTP write endpoint (`/api/v2/write`). |
-| | `INFLUXDB_TOKEN` | No | *None* | InfluxDB v2 API Token. |
-| | `INFLUXDB_ORG` | No | *None* | InfluxDB Organization Name. |
-| | `INFLUXDB_BUCKET` | No | *None* | InfluxDB Target Bucket Name. |
-| **Regional** | `TIMEZONE` | No | `Europe/Paris` | System timezone (e.g. `Europe/Paris`, `UTC`). |
-| | `KEYMAP` | No | `us-intl` | Console keyboard layout (`us-intl`, `us`, `fr`, `es`). |
-| **Access** | `SSH_KEYS_URL` | No | *None* | Space-separated list of URLs to fetch public SSH keys from. |
-| | `ROOT_PASSWORD` | No | *None* | Optional password for direct HDMI/Keyboard local root console access. |
-| **Network** | `STATIC_IP` | No | *DHCP* | Static IPv4 address (e.g. `10.0.0.150`). Leave blank for DHCP. |
-| | `NET_MASK` | No | `255.255.255.0` | Subnet mask for static IP. |
-| | `NET_GATEWAY` | No | `.1` of IP | Default gateway IP for static configuration. |
-| | `DNS_SERVERS` | No | *System* | Space-separated list of DNS servers (e.g. `"1.1.1.1 8.8.8.8"`). |
-| **Wi-Fi** | `WIFI_SSID` | No | *None* | Wi-Fi network SSID (leave blank if connected via RJ45). |
-| | `WIFI_PASSWORD` | No | *None* | Wi-Fi WPA2 password. |
-| | `WIFI_COUNTRY` | No | `FR` | Two-letter ISO country code for Wi-Fi regulatory domain. |
+Once the Pi has booted, the local HDMI console shows the hostname, the IP address, the metrics URL
+and the SSH command. Then, over SSH (`ssh -p 34522 root@<IP>`):
 
----
-
-## 🔍 Verification & Diagnostics
-
-Once the Raspberry Pi boots:
-
-1. **Scrape local Telegraf Prometheus PULL exporter:**
-   ```bash
-   curl -sS http://localhost:9100/metrics
+1. **Scrape the exporter:**
+   ```sh
+   curl -sS http://localhost:9100/metrics | head
    ```
-2. **Inspect raw 1-Wire sensor output locally:**
-   ```bash
+2. **Check the sensors are seen by the kernel:**
+   ```sh
+   ls /sys/bus/w1/devices/
    cat /sys/bus/w1/devices/28-*/w1_slave
    ```
-3. **Verify Telegraf status:**
-   ```bash
-   rc-service telegraf status
+   `YES` on the first line validates the CRC; `t=21437` means 21.437 °C.
+3. **Check temperatures are exported:**
+   ```sh
+   curl -sS http://localhost:9100/metrics | grep w1_bus_master
    ```
-4. **Verify root filesystem is 100% RAM:**
-   ```bash
-   df -h /
-   # Expected output: tmpfs on /
+4. **Check the services:**
+   ```sh
+   rc-service node-exporter status
+   rc-service probe-init status
    ```
+5. **Confirm the root filesystem is RAM:**
+   ```sh
+   df -h /          # expected: tmpfs mounted on /
+   free -m
+   ```
+
+### Common Issues
+
+| Symptom | Likely cause | Check |
+| :--- | :--- | :--- |
+| No IP on the console banner | No DHCP lease | Cable, switch port, `ifup eth0` |
+| `/sys/bus/w1/devices/` empty | Wiring, or missing pull-up resistor | 4.7 kΩ resistor, 3.3 V on pin 1, data on pin 7 |
+| Port 9100 refuses the connection | Exporter down | `rc-service node-exporter status` |
+| 401 on `/metrics` | Basic auth enabled | Username and password must match the bcrypt hash |
+| Settings from `probe.conf` ignored | File not read | Must sit at the root of the FAT32 partition, named exactly `probe.conf` |
+
+Remember that the root filesystem is RAM: any change made over SSH is lost on reboot unless it is
+persisted with `lbu commit` or baked into the overlay archive.
 
 ---
 
-## 📜 Notice
+## Repository Layout
+
+```text
+rpi64-alpine-diskless-probe/
+├── .github/
+│   ├── copilot-instructions.md     # Pointer to AGENTS.md for Copilot
+│   └── workflows/
+│       ├── build-release.yml       # Image build and release publication
+│       └── security-scan.yml       # Gitleaks + PII gates
+├── boot/
+│   ├── cmdline.txt                 # Diskless kernel boot parameters
+│   └── usercfg.txt                 # 1-Wire device tree overlay
+├── overlay/                        # Content of the apkovl (the running system)
+│   ├── etc/
+│   │   ├── apk/world               # 14 top-level packages
+│   │   ├── init.d/probe-init       # Boot init: reads probe.conf, applies settings
+│   │   ├── modules                 # w1-gpio, w1-therm, brcmfmac, ...
+│   │   ├── runlevels/              # OpenRC service symlinks
+│   │   └── ssh/sshd_config         # Port 34522, keys only
+│   ├── root/README.md              # On-probe field notes (shipped in the image)
+│   └── usr/local/bin/
+│       ├── probe-exporter-auth     # Builds node_exporter options at boot
+│       └── probe-inventory         # Publishes the probe_info metric
+├── scripts/
+│   ├── qemu-boot-test.sh           # Headless QEMU boot smoke test
+│   ├── validate-apkovl.sh          # Pre-flight overlay validation
+│   ├── security-check.sh           # Local secret scan
+│   └── scan-pii-local.py           # Local PII scan, mirrors the CI gate
+├── build-apkovl.sh                 # Assembles the overlay archive
+├── probe.conf.example              # Full commented configuration reference
+├── probe.conf                      # Minimal configuration shipped on the card
+├── AGENTS.md                       # Instructions for AI agents and sysadmins
+└── README.md                       # This file
+```
+
+---
+
+## Notice
 
 Copyright (c) 2026 Atlantic Zone / Strategic Zone. All rights reserved.

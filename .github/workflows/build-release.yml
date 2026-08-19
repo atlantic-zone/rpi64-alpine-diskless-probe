@@ -11,10 +11,10 @@ permissions:
 
 jobs:
   build:
-    # Runner GitHub hebergé : le runner Arch auto-heberge n'est pas garanti en
-    # ligne, et un job qui l'attend reste en file sans erreur ni alerte.
-    # QEMU binfmt est installe par docker/setup-qemu-action, donc le conteneur
-    # arm64 du build fonctionne sur un hote x86.
+    # GitHub-hosted runner: the self-hosted Arch runner is not guaranteed to be
+    # online, and a job waiting for it queues silently with no error or alert.
+    # QEMU binfmt is installed by docker/setup-qemu-action, so the arm64 build
+    # container runs fine on an x86 host.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -97,10 +97,10 @@ jobs:
             Standalone **Alpine Linux Diskless (100% RAM)** distribution for Raspberry Pi 3, 4, and 5 (`aarch64` / `rpi64`).
             
             ### Included in this build:
-            - **Metriques Prometheus natives :** `node_exporter` sur le port `9100`, capteurs DS18B20 exposes automatiquement via hwmon.
-            - **Authentification optionnelle :** basic auth activee par une empreinte bcrypt dans `probe.conf` (aucun mot de passe en clair sur la carte SD).
-            - **SSH durci :** port `34522`, authentification par cle uniquement.
-            - **Zero configuration obligatoire :** la sonde demarre sans `probe.conf` (DHCP, clavier US, heure de Paris).
+            - **Native Prometheus metrics:** `node_exporter` on port `9100`, DS18B20 sensors exposed automatically through hwmon.
+            - **Optional authentication:** basic auth enabled by a bcrypt hash in `probe.conf` (no plaintext password on the SD card).
+            - **Hardened SSH:** port `34522`, key authentication only.
+            - **Zero mandatory configuration:** the probe boots with no `probe.conf` at all (DHCP, US keymap, Paris time).
             - **CalVer Standard Tagging:** Versioned by date (`vYYYY.MM.DD.RUN`).
             - **Real QEMU Integration Test:** Live boot smoke-tested in CI via QEMU AArch64.
             - **Automated QA Validation:** Passed syntax, OpenRC dependency, and kernel module checks.

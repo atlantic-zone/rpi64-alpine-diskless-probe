@@ -1,79 +1,106 @@
-# RPi64 Alpine Diskless Probe
+# RPi64 Alpine Diskless Probe - Field Notes
 
-Image 100% RAM. Tout ce qui est installe ici disparait au reboot.
-RAM totale sur Pi 3 : ~450 Mo de tmpfs. Verifier avant d'installer : `df -h /`
+This system runs **entirely in RAM**. Anything installed here is gone after a reboot.
+Total `tmpfs` on a Pi 3 is about 450 MB. Check before installing anything: `df -h /`
 
----
-
-## bore (tunnel TCP inverse)
-
-Pas package dans Alpine. Binaire statique musl.
-
-```sh
-curl -sSL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-unknown-linux-musl.tar.gz \
-  | tar -xz -C /usr/local/bin/ && chmod +x /usr/local/bin/bore && bore --version
-```
-
-Ouvrir un tunnel vers le relais (SSH local port 22) :
-
-```sh
-bore local 22 --to edge.sh.zone --secret "$BORE_SECRET" --port 0
-```
-
-Le relais repond `listening at edge.sh.zone:PORT`. C'est ce port qu'on utilise pour se connecter.
-`--port 0` = port attribue au hasard. Mettre un numero fixe pour un port reserve.
-
-En arriere-plan, avec relance auto :
-
-```sh
-setsid sh -c 'while :; do bore local 22 --to edge.sh.zone --secret "$BORE_SECRET" --port 0; sleep 5; done' \
-  > /var/log/bore.log 2>&1 &
-tail -f /var/log/bore.log
-```
-
-Poids : ~1 Mo.
+To make a change permanent, either run `lbu commit`, or put it in the `overlay/` directory of the
+repository and rebuild the image.
 
 ---
 
-## sshx (terminal web partage)
+## What This Probe Does
 
-Pas package dans Alpine. Binaire statique musl.
-
-```sh
-curl -sSL https://s3.amazonaws.com/sshx/sshx-aarch64-unknown-linux-musl.tar.gz \
-  | tar -xz -C /usr/local/bin/ && chmod +x /usr/local/bin/sshx && sshx --version
-```
-
-Lancer une session (renvoie une URL a partager) :
+DS18B20 1-Wire sensors are read by the kernel and exported by **Prometheus node_exporter** on port
+**9100**. There is no agent and no collection script: the kernel produces the readings, the exporter
+publishes them.
 
 ```sh
-sshx
+curl -sS http://localhost:9100/metrics | grep w1_bus_master
 ```
 
-En arriere-plan :
-
-```sh
-setsid sshx > /var/log/sshx.log 2>&1 &
-sleep 3 && cat /var/log/sshx.log
+```text
+node_hwmon_temp_celsius{chip="w1_bus_master1_28_0000007137f7",sensor="temp1"} 25.312
 ```
 
-Poids : ~2,7 Mo.
-Attention : l'URL donne un shell root complet a qui l'ouvre. Session ephemere, ne pas laisser tourner.
+Inventory labels come from `probe.conf` and are published separately:
+
+```text
+probe_info{client="example-studio",site="paris-nord",location="server-room"} 1
+```
 
 ---
 
-## Outils Raspberry Pi (vcgencmd, otp, temperature)
-
-Le meta-paquet `raspberrypi-utils` tire python3 + perl + bash + sudo = **89 Mo de RAM**.
-Ne jamais l'installer sur cette image. Installer uniquement le sous-paquet voulu :
+## Quick Diagnostics
 
 ```sh
-apk add raspberrypi-utils-vcgencmd     # 80 Ko  - temperature, OTP, throttling
-apk add raspberrypi-utils-vcmailbox    # 80 Ko  - mailbox firmware brut
-apk add raspberrypi-utils-pinctrl      # 144 Ko - etat des GPIO
+ls /sys/bus/w1/devices/                  # sensors seen by the kernel
+cat /sys/bus/w1/devices/28-*/w1_slave    # raw reading, "YES" = CRC valid
+rc-service node-exporter status          # exporter state
+rc-service probe-init status             # boot init state
+rc-status                                # all services
+df -h /                                  # must show tmpfs on /
+free -m                                  # available memory
+ip -o -4 addr show                       # addresses
 ```
 
-Usage courant :
+Empty `/sys/bus/w1/devices/` means wiring: check the 4.7 kΩ pull-up resistor, 3.3 V on pin 1, data
+on pin 7 (GPIO 4).
+
+A `401` from the exporter means basic auth is enabled: `curl -u probe:<password> ...`
+
+---
+
+## Configuration
+
+Everything is read once at boot from `/media/mmcblk0p1/probe.conf` on the SD card.
+
+```sh
+cat /media/mmcblk0p1/probe.conf
+```
+
+The card is mounted read-only. To edit it in place:
+
+```sh
+mount -o remount,rw /media/mmcblk0p1
+vi /media/mmcblk0p1/probe.conf
+mount -o remount,ro /media/mmcblk0p1
+rc-service probe-init restart
+```
+
+Editing the card on a laptop is usually simpler.
+
+---
+
+## Shell Constraints (BusyBox)
+
+This is Alpine: `grep`, `sed` and `awk` come from BusyBox and implement POSIX.
+
+BusyBox `grep` supports BRE and ERE. PCRE options such as `-P` belong to GNU grep, so a command
+using one aborts and prints its usage page to the console. Use `awk` to extract a field:
+
+```sh
+ip -o -4 addr show eth0 | awk '{split($4,a,"/"); print a[1]}'
+```
+
+Write any script on this probe in POSIX `sh`: `case ... esac` for matching, `[ ... ]` for tests,
+`tr` for case conversion.
+
+---
+
+## Raspberry Pi Tools (vcgencmd, OTP, temperature)
+
+Install the specific sub-package you need, each costing a few hundred KB:
+
+```sh
+apk add raspberrypi-utils-vcgencmd     # 80 KB  - temperature, OTP, throttling
+apk add raspberrypi-utils-vcmailbox    # 80 KB  - raw firmware mailbox
+apk add raspberrypi-utils-pinctrl      # 144 KB - GPIO state
+```
+
+The full `raspberrypi-utils` meta-package costs 89 MB of RAM, since it pulls python3, perl, bash and
+sudo. On a 450 MB `tmpfs` that is a fifth of the system for a temperature reading.
+
+Common usage:
 
 ```sh
 vcgencmd measure_temp
@@ -81,15 +108,15 @@ vcgencmd get_throttled
 vcgencmd otp_dump | grep '^17:'   # 1020000a = netboot OFF / 3020000a = netboot ON
 ```
 
-A eviter : `raspberrypi-utils-raspinfo` (tire bash+sudo), `-otpset` (tire python3, et il est casse
-sur Pi 3), `-ovmerge` et `-overlaycheck` (tirent perl).
+Cost of the other sub-packages, for reference: `-raspinfo` pulls bash and sudo, `-otpset` pulls
+python3 and misbehaves on Pi 3, `-ovmerge` and `-overlaycheck` pull perl.
 
 ---
 
-## Editeur
+## Editor
 
-`vi` de busybox est deja present et gratuit.
-`vim` complet coute 33 Mo de RAM (tire vim-common + xxd) :
+BusyBox `vi` is already present and costs nothing.
+Full `vim` costs 33 MB of RAM (pulls vim-common + xxd):
 
 ```sh
 apk add vim
@@ -97,52 +124,55 @@ apk add vim
 
 ---
 
-## Console locale HDMI + clavier
+## Local Console (HDMI + Keyboard)
 
-Deja embarque dans l'image : `kbd-bkeymaps`.
-La disposition se regle dans `probe.conf` (`KEYMAP=us-intl`, `fr-fr`, `fr-bepo`...).
+`kbd-bkeymaps` ships with the image. The layout is set in `probe.conf` (`KEYMAP=us`, `us-intl`,
+`fr`, `es`).
 
-Changer a chaud sans rebooter :
+Change it live without rebooting:
 
 ```sh
 loadkmap < /usr/share/bkeymaps/fr/fr.bkm
-ls /usr/share/bkeymaps/          # dispositions disponibles
+ls /usr/share/bkeymaps/          # available layouts
 ```
 
 ---
 
 ## Wi-Fi
 
-Deja embarque : `wpa_supplicant`, `wireless-regdb`, `linux-firmware-brcm`.
-Se configure dans `probe.conf` (`WIFI_SSID`, `WIFI_PASSWORD`, `WIFI_COUNTRY`) puis reboot.
+Already in the image: `wpa_supplicant`, `wireless-regdb`, `linux-firmware-brcm`.
+Configure it in `probe.conf` (`WIFI_SSID`, `WIFI_PASSWORD`, `WIFI_COUNTRY`), then reboot.
 
-Connexion manuelle immediate :
+Note that `wlan0` is only brought up when `WIFI_SSID` is set: on a wired probe, an unconfigured
+`wlan0` would stall the boot for about 20 seconds looking for a DHCP lease.
+
+Immediate manual connection:
 
 ```sh
-wpa_passphrase "MonSSID" "MonMotDePasse" > /etc/wpa_supplicant/wpa_supplicant.conf
+wpa_passphrase "MySSID" "MyPassword" > /etc/wpa_supplicant/wpa_supplicant.conf
 rc-service wpa_supplicant restart
 udhcpc -i wlan0
-iw dev wlan0 link            # necessite apk add iw
+iw dev wlan0 link            # requires: apk add iw
 ```
 
 ---
 
-## Divers
+## Extras
 
 ```sh
-apk add rsync              # 1,5 Mo
-apk add jq                 # 1 Mo
-apk add prometheus-node-exporter   # 15 Mo, alternative legere a telegraf
+apk add rsync              # 1.5 MB
+apk add jq                 # 1 MB
+apk add tcpdump            # 1.5 MB
 ```
 
 ---
 
-## Verifier la RAM
+## Checking RAM Usage
 
 ```sh
-df -h /            # occupation du tmpfs racine
-free -m            # memoire
+df -h /            # root tmpfs usage
+free -m            # memory
 awk -F: '/^P:/{p=$2} /^I:/{printf "%10d  %s\n", $2, p}' /lib/apk/db/installed | sort -rn | head -20
 ```
 
-La derniere commande liste les 20 paquets les plus gros, en octets.
+The last command lists the 20 largest installed packages, in bytes.

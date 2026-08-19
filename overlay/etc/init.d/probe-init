@@ -15,16 +15,10 @@ start() {
     # Default fallback values if probe.conf is missing or incomplete
     HOSTNAME="rpi-probe"
     LOCATION="unspecified"
-    INTERVAL_SECONDS="10"
     GPIO_PIN="4"
     TIMEZONE="Europe/Paris"
-    KEYMAP="us-intl"
+    KEYMAP="us"
     WIFI_COUNTRY="FR"
-    VICTORIAMETRICS_URL=""
-    INFLUXDB_URL=""
-    INFLUXDB_TOKEN=""
-    INFLUXDB_ORG=""
-    INFLUXDB_BUCKET=""
 
     # 1. Read SD Card probe.conf if present
     if [ -f "${CONF_FILE}" ]; then
@@ -54,7 +48,7 @@ start() {
         if command -v loadkmap >/dev/null 2>&1 && [ -f "${KM_FILE}" ]; then
             zcat "${KM_FILE}" | loadkmap 2>/dev/null || true
         else
-            ewarn "Keymap ${KEYMAP} introuvable (${KM_FILE}), clavier US par defaut"
+            ewarn "Keymap ${KEYMAP} not found (${KM_FILE}), falling back to US layout"
         fi
     fi
 
@@ -100,22 +94,33 @@ EOF
         fi
         rc-service networking restart 2>/dev/null || true
     else
-        # Fallback Default DHCP on eth0 and wlan0
+        # Fallback: DHCP. wlan0 is only declared when Wi-Fi is actually
+        # configured, otherwise udhcpc retries on a dead interface and
+        # stalls the boot for ~20s before giving up.
         cat > /etc/network/interfaces <<EOF
 auto lo
 iface lo inet loopback
 
 auto eth0
 iface eth0 inet dhcp
+EOF
+        if [ -n "${WIFI_SSID}" ]; then
+            cat >> /etc/network/interfaces <<EOF
 
 auto wlan0
 iface wlan0 inet dhcp
 EOF
+        fi
     fi
 
-    # Ensure networking service is active
-    rc-service networking restart 2>/dev/null || ifup -a 2>/dev/null || true
-    rc-service chronyd restart 2>/dev/null || true
+    # Only restart networking when the running config no longer matches what
+    # we just wrote. The boot runlevel already brought eth0 up and obtained a
+    # DHCP lease; an unconditional restart tears down that working lease.
+    if [ -n "${STATIC_IP}" ]; then
+        rc-service networking restart 2>/dev/null || ifup -a 2>/dev/null || true
+    else
+        ifup -a 2>/dev/null || true
+    fi
 
     # 8. Wi-Fi Config
     if [ -n "${WIFI_SSID}" ]; then
@@ -138,18 +143,18 @@ EOF
         sed -i "s/gpiopin=[0-9]*/gpiopin=${GPIO_PIN}/" /media/mmcblk0p1/usercfg.txt 2>/dev/null || true
     fi
 
-    # 10. Prometheus node_exporter : options de lancement et authentification
-    #     Les deux scripts s'executent une seule fois, ici, avant le demarrage
-    #     du service. Pas de cron.
+    # 10. Prometheus node_exporter: launch options and authentication.
+    #     Both scripts run exactly once, here, before the service starts.
+    #     No cron.
     mkdir -p /var/lib/node_exporter
     chown prometheus:prometheus /var/lib/node_exporter 2>/dev/null || true
 
     if [ -x /usr/local/bin/probe-exporter-auth ]; then
-        /usr/local/bin/probe-exporter-auth || ewarn "probe-exporter-auth a echoue"
+        /usr/local/bin/probe-exporter-auth || ewarn "probe-exporter-auth failed"
     fi
 
     if [ -x /usr/local/bin/probe-inventory ]; then
-        /usr/local/bin/probe-inventory || ewarn "probe-inventory a echoue"
+        /usr/local/bin/probe-inventory || ewarn "probe-inventory failed"
     fi
 
     # 11. Synchronize Time via NTP and Generate /etc/issue Banner
@@ -159,29 +164,35 @@ EOF
 
     PRIMARY_IP=""
     for i in $(seq 1 15); do
-        PRIMARY_IP=$(ip -4 addr show eth0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1 || true)
-        if [ -z "${PRIMARY_IP}" ]; then
-            PRIMARY_IP=$(ip -4 addr show wlan0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1 || true)
-        fi
-        if [ -n "${PRIMARY_IP}" ]; then
-            break
-        fi
+        # BusyBox grep has no -P (PCRE): use ip -o + awk, both POSIX.
+        for IFACE in eth0 wlan0; do
+            PRIMARY_IP=$(ip -o -4 addr show "${IFACE}" 2>/dev/null \
+                | awk '{split($4,a,"/"); print a[1]; exit}')
+            [ -n "${PRIMARY_IP}" ] && break
+        done
+        [ -n "${PRIMARY_IP}" ] && break
         sleep 1
     done
 
-    if [ -z "${PRIMARY_IP}" ]; then
-        PRIMARY_IP="Waiting for DHCP IP / No Connection"
+    if [ -n "${PRIMARY_IP}" ]; then
+        IP_LINE="${PRIMARY_IP}"
+        METRICS_LINE="http://${PRIMARY_IP}:9100/metrics"
+        SSH_LINE="ssh -p 34522 root@${PRIMARY_IP}"
+    else
+        IP_LINE="no address (check the network cable / DHCP)"
+        METRICS_LINE="unavailable until the probe gets an IP"
+        SSH_LINE="unavailable until the probe gets an IP"
     fi
 
     cat > /etc/issue <<EOF
 
 ================================================================================
-  ▲ ATLANTIC ZONE - RPI64 DISKLESS PROBE
+  ATLANTIC ZONE - RPI64 DISKLESS PROBE
 ================================================================================
   Hostname     : ${HOSTNAME}
-  IP Address   : ${PRIMARY_IP}
-  Metrics PULL : http://${PRIMARY_IP}:9100/metrics
-  SSH Access   : ssh -p 34522 root@${PRIMARY_IP}
+  IP Address   : ${IP_LINE}
+  Metrics PULL : ${METRICS_LINE}
+  SSH Access   : ${SSH_LINE}
 ================================================================================
 
 EOF

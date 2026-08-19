@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Replique exacte du scan PII du CI (.github/workflows/security-scan.yml).
-# A lancer AVANT de pousser, pour ne pas decouvrir un rouge sur GitHub.
+# Run this BEFORE pushing, so a red gate is not discovered on GitHub.
 import os, sys, re
 
 REGEX_PATTERNS = [
