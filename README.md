@@ -71,41 +71,148 @@ separately.
 
 ---
 
-## SD Card Preparation (macOS)
+## SD Card Preparation
 
-On macOS, using the raw device (`/dev/rdiskX`) is 10x to 20x faster because it bypasses the kernel
-buffer cache.
+The card carries a single FAT32 partition holding the Alpine boot files, the release archive and,
+optionally, `probe.conf`. Any card of 1 GB or more works: the system runs in RAM and writes nothing
+back.
 
-### 1. Identify the SD card
+> **Read the device name from the listing every time.** Disk numbering changes between machines and
+> between reboots, and the format command erases whatever device it is given. Confirm the size and
+> the name match the card you just inserted before running it.
+
+### macOS
+
+**1. Identify the card**
 
 ```bash
 diskutil list
 ```
 
-### 2. Format as FAT32
+Look for the disk whose size matches the card, and note its identifier:
+
+```text
+/dev/disk4 (external, physical):
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:     FDisk_partition_scheme                        *7.9 GB     disk4
+   1:                 DOS_FAT_32 NO NAME                 7.9 GB     disk4s1
+```
+
+Here the card is `disk4`. Substitute that number for `X` in the commands below.
+
+**2. Format as FAT32**
 
 ```bash
-# Replace rdiskX with your device, for example rdisk2
 diskutil eraseDisk FAT32 RPIPROBE MBRFormat /dev/rdiskX
 ```
 
-### 3. Download and extract the release
+`rdiskX` is the raw device, 10x to 20x faster than `diskX` because it bypasses the kernel buffer
+cache. The card mounts itself at `/Volumes/RPIPROBE` when the command finishes.
+
+**3. Extract the release**
 
 ```bash
-curl -sSL "https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/latest/download/rpi64-alpine-diskless-probe-latest.tar.gz" | tar -xzf - -C /Volumes/RPIPROBE/
+curl -L -o /tmp/rpi-probe.tar.gz \
+  "https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/latest/download/rpi64-alpine-diskless-probe-latest.tar.gz"
+
+sudo tar -xzf /tmp/rpi-probe.tar.gz -C /Volumes/RPIPROBE
 ```
 
-### 4. Eject
+`sudo` preserves the file modes carried in the archive. Downloading to a file first lets `curl`
+report a failed transfer, which piping straight into `tar` hides.
+
+**4. Flush and eject**
 
 ```bash
+sync
 diskutil eject /dev/diskX
 ```
 
-The card is ready. Editing `probe.conf` is optional: do it only if you need a fixed hostname,
-inventory labels, Wi-Fi or a static IP.
+`eject` refuses while a process still holds the volume: close any Finder window or shell sitting in
+`/Volumes/RPIPROBE` first. Wait for `Disk /Volumes/RPIPROBE ejected` before pulling the card.
 
-On Linux, format with `mkfs.vfat -F 32 -n RPIPROBE /dev/sdX1` and extract the same archive to the
-mount point. On Windows, format as FAT32 and extract the archive to the root of the card with 7-Zip.
+### Linux
+
+**1. Identify the card**
+
+```bash
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL
+```
+
+```text
+NAME   SIZE TYPE MOUNTPOINT MODEL
+sda    477G disk            Samsung SSD 860
+└─sda1 477G part /
+sdb    7.4G disk            SD Card Reader
+└─sdb1 7.4G part /media/user/NO NAME
+```
+
+Here the card is `sdb`. Substitute that letter for `X` below, and confirm the size before going
+further: `sda` is the system disk.
+
+**2. Unmount any auto-mounted partition**
+
+```bash
+sudo umount /dev/sdX* 2>/dev/null
+```
+
+**3. Create a single FAT32 partition**
+
+```bash
+sudo parted -s /dev/sdX mklabel msdos
+sudo parted -s /dev/sdX mkpart primary fat32 1MiB 100%
+sudo parted -s /dev/sdX set 1 boot on
+sudo mkfs.vfat -F 32 -n RPIPROBE /dev/sdX1
+```
+
+**4. Mount and extract the release**
+
+```bash
+sudo mkdir -p /mnt/rpiprobe
+sudo mount /dev/sdX1 /mnt/rpiprobe
+
+curl -L -o /tmp/rpi-probe.tar.gz \
+  "https://github.com/atlantic-zone/rpi64-alpine-diskless-probe/releases/latest/download/rpi64-alpine-diskless-probe-latest.tar.gz"
+
+sudo tar -xzf /tmp/rpi-probe.tar.gz -C /mnt/rpiprobe
+```
+
+**5. Flush and unmount**
+
+```bash
+sync
+sudo umount /mnt/rpiprobe
+```
+
+`umount` completes the write. Pulling the card on the strength of `sync` alone leaves the FAT
+metadata unwritten, and the Pi then boots to a firmware rainbow screen.
+
+### Windows
+
+Format the card as FAT32 with the built-in formatter, then extract the release archive to the root
+of the card with 7-Zip. Use the "Safely Remove Hardware" tray icon to flush the write.
+
+### Verify the card
+
+```bash
+ls /Volumes/RPIPROBE          # macOS
+ls /mnt/rpiprobe              # Linux
+```
+
+Six entries confirm a complete extraction:
+
+```text
+config.txt              Raspberry Pi firmware configuration
+cmdline.txt             kernel command line
+localhost.apkovl.tar.gz the overlay Alpine restores into RAM at boot
+boot/                   kernel and initramfs
+apks/ and cache/        the packages installed at boot, offline
+probe.conf              your settings, already at the root and ready to edit
+```
+
+The card is ready. Editing `probe.conf` is optional: do it only if you need a fixed hostname,
+inventory labels, Wi-Fi or a static IP. `probe.conf.example` sits next to it, documenting every
+variable.
 
 ---
 
