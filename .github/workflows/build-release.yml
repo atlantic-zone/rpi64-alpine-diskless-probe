@@ -76,12 +76,11 @@ jobs:
             sh -c "apk update && apk fetch --recursive -o /cache \$(cat /world)"
           
           echo "Packing final distribution archive..."
+          STEPS_TAG="${{ steps.tagger.outputs.TAG_NAME }}"
           tar -czf "dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz" -C staging .
           cp "dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz" "dist/rpi64-alpine-diskless-probe-latest.tar.gz"
           
           echo "Release bundle ready: dist/rpi64-alpine-diskless-probe-${STEPS_TAG}.tar.gz and dist/rpi64-alpine-diskless-probe-latest.tar.gz"
-        env:
-          STEPS_TAG: ${{ steps.tagger.outputs.TAG_NAME }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
